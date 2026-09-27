@@ -216,11 +216,12 @@ final class AppModel {
         await PendingCompletions.flush(client: client, store: environment.store)
         let now = Date()
         let today = DayKey(now, calendar: calendar)
-        var range = DateInterval(start: today.adding(days: -14).startDate(in: calendar),
-                                 end: today.adding(days: 62).startDate(in: calendar))
-        if let loadedRange {
-            range = DateInterval(start: min(range.start, loadedRange.start), end: max(range.end, loadedRange.end))
-        }
+        let defaultRange = DateInterval(start: today.adding(days: -14).startDate(in: calendar),
+                                        end: today.adding(days: 62).startDate(in: calendar))
+        let range = loadedRange.map {
+            DateInterval(start: min(defaultRange.start, $0.start), end: max(defaultRange.end, $0.end))
+        } ?? defaultRange
+        let calendar = self.calendar
         do {
             async let fetchedTasks = client.fetchTasks(.workingSet(now: now))
             async let fetchedEvents = client.fetchEvents(overlapping: range, calendar: calendar)

@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="AriaWindows.Views.AIChatPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:AriaWindows.Helpers"
+    xmlns:views="using:AriaWindows.Views"
+    xmlns:vm="using:Aria.Core.ViewModels"
+    Background="Transparent">
+
+    <Page.Resources>
+        <DataTemplate x:Key="UserBubble" x:DataType="vm:ChatBubbleViewModel">
+            <Border
+                MaxWidth="560"
+                Margin="80,4,0,4"
+                Padding="14,10"
+                HorizontalAlignment="Right"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                CornerRadius="18">
+                <TextBlock Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" IsTextSelectionEnabled="True" Text="{x:Bind Text}" TextWrapping="Wrap" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="AssistantBubble" x:DataType="vm:ChatBubbleViewModel">
+            <Border
+                MaxWidth="560"
+                Margin="0,4,80,4"
+                Padding="14,10"
+                HorizontalAlignment="Left"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="18">
+                <TextBlock IsTextSelectionEnabled="True" Text="{x:Bind Text}" TextWrapping="Wrap" />
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="ActionBubble" x:DataType="vm:ChatBubbleViewModel">
+            <Border
+                Margin="0,2"
+                Padding="10,4"
+                HorizontalAlignment="Left"
+                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                CornerRadius="12">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon FontSize="12" Glyph="&#xE73E;" Visibility="{x:Bind helpers:Ui.Visible(Succeeded)}" />
+                    <FontIcon FontSize="12" Glyph="&#xE7BA;" Visibility="{x:Bind helpers:Ui.Collapsed(Succeeded)}" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Text}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+        <DataTemplate x:Key="ErrorBubble" x:DataType="vm:ChatBubbleViewModel">
+            <InfoBar
+                Margin="0,4"
+                IsClosable="False"
+                IsOpen="True"
+                Message="{x:Bind Text}"
+                Severity="Error" />
+        </DataTemplate>
+        <views:BubbleTemplateSelector
+            x:Key="BubbleSelector"
+            Action="{StaticResource ActionBubble}"
+            Assistant="{StaticResource AssistantBubble}"
+            Error="{StaticResource ErrorBubble}"
+            User="{StaticResource UserBubble}" />
+    </Page.Resources>
+
+    <Grid Padding="40,28,40,24" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid MaxWidth="820">
+            <StackPanel>
+                <TextBlock Style="{StaticResource PageTitleStyle}" Text="Aria" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind ViewModel.SelectedModel, Mode=OneWay}" />
+            </StackPanel>
+            <Button HorizontalAlignment="Right" VerticalAlignment="Center" Command="{x:Bind ViewModel.ClearChatCommand}" ToolTipService.ToolTip="Clear the conversation (tasks and events are not affected)">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                    <TextBlock Text="Clear" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <InfoBar
+            Grid.Row="1"
+            MaxWidth="820"
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.NeedsApiKey, Mode=OneWay}"
+            Message="Aria uses your own OpenRouter API key. It is stored only in the Windows Credential Locker on this PC."
+            Severity="Informational"
+            Title="Connect OpenRouter">
+            <InfoBar.Content>
+                <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="8">
+                    <PasswordBox Width="320" Password="{x:Bind ViewModel.ApiKeyInput, Mode=TwoWay}" PlaceholderText="sk-or-…" />
+                    <Button Command="{x:Bind ViewModel.SaveApiKeyCommand}" Content="Save key" Style="{StaticResource AccentButtonStyle}" />
+                    <HyperlinkButton Content="Get a key" NavigateUri="https://openrouter.ai/keys" />
+                </StackPanel>
+            </InfoBar.Content>
+        </InfoBar>
+
+        <ListView
+            x:Name="Messages"
+            Grid.Row="2"
+            MaxWidth="820"
+            ItemTemplateSelector="{StaticResource BubbleSelector}"
+            ItemsSource="{x:Bind ViewModel.Chat}"
+            SelectionMode="None">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="MinHeight" Value="0" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemContainerTransitions>
+                <TransitionCollection>
+                    <AddDeleteThemeTransition />
+                </TransitionCollection>
+            </ListView.ItemContainerTransitions>
+            <ListView.Footer>
+                <StackPanel Margin="0,8" Orientation="Horizontal" Spacing="8" Visibility="{x:Bind helpers:Ui.Visible(ViewModel.IsThinking), Mode=OneWay}">
+                    <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsThinking, Mode=OneWay}" />
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Aria is thinking…" />
+                </StackPanel>
+            </ListView.Footer>
+        </ListView>
+
+        <Border Grid.Row="3" MaxWidth="820" Style="{StaticResource AiBarStyle}">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox
+                    x:Name="Input"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    KeyDown="Input_KeyDown"
+                    PlaceholderText="Ask Aria… (e.g. “Add 'Finish essay' due Friday at 5pm”)"
+                    Text="{x:Bind ViewModel.ChatDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                    TextWrapping="Wrap" />
+                <Button
+                    Grid.Column="1"
+                    Width="40"
+                    Height="40"
+                    Padding="0"
+                    AutomationProperties.Name="Send"
+                    Command="{x:Bind ViewModel.SendChatCommand}"
+                    CornerRadius="20"
+                    IsEnabled="{x:Bind helpers:Ui.Not(ViewModel.IsThinking), Mode=OneWay}"
+                    Style="{StaticResource AccentButtonStyle}">
+                    <FontIcon FontSize="16" Glyph="&#xE724;" />
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

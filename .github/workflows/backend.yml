@@ -1,0 +1,57 @@
+name: Backend + shared logic
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["supabase/**", "ios/AriaKit/**", "windows/Aria.Core/**", "windows/Aria.Core.Tests/**", "shared/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["supabase/**", "ios/AriaKit/**", "windows/Aria.Core/**", "windows/Aria.Core.Tests/**", "shared/**", ".github/workflows/backend.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  supabase:
+    name: Supabase schema, RLS and end-to-end client tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies supabase/migrations)
+        run: supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta
+
+      - name: Database tests (pgTAP, Row-Level Security)
+        run: supabase test db
+
+      - name: Export API settings
+        run: |
+          supabase status -o env > supabase.env
+          set -a; source supabase.env; set +a
+          echo "ARIA_TEST_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "ARIA_TEST_SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "ARIA_TEST_REALTIME=1" >> "$GITHUB_ENV"
+          echo "API_URL=$API_URL"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: .NET tests (unit + Supabase integration + Realtime)
+        run: dotnet test windows/Aria.Core.Tests/Aria.Core.Tests.csproj -c Release --logger "console;verbosity=normal"
+
+      - name: Swift tests on Linux (unit + Supabase integration)
+        run: |
+          docker run --rm --network host -v "$PWD:/work" -w /work/ios/AriaKit \
+            -e ARIA_TEST_SUPABASE_URL -e ARIA_TEST_SUPABASE_ANON_KEY \
+            swift:6.2-noble swift test
+
+      - name: Supabase logs on failure
+        if: failure()
+        run: supabase status || true

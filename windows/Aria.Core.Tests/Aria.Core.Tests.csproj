@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Aria.Core\Aria.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Golden files shared with the Swift tests (tool schema + system prompt parity). -->
+    <None Include="..\..\shared\ai\*" LinkBase="shared" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
