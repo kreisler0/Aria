@@ -342,6 +342,14 @@ try {
     await page.locator("nav.tabbar").getByRole("button", { name: "Today" }).click();
     await page.locator("nav.tabbar").waitFor();
     assert.equal(await page.locator("nav.sidebar").isVisible(), false);
+    // iOS zooms into text fields under 16px on focus, so none may be smaller.
+    await go("Tasks", "nav.tabbar");
+    await page.getByRole("button", { name: "New task" }).click();
+    const small = await page.evaluate(() => [...document.querySelectorAll("input:not([type=checkbox]), textarea, select")]
+      .filter((el) => el.offsetParent && parseFloat(getComputedStyle(el).fontSize) < 16).map((el) => el.id || el.name));
+    assert.deepEqual(small, [], "text fields smaller than 16px make iOS zoom in");
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("dialog").waitFor({ state: "detached" });
     for (const tab of ["Today", "Calendar", "Tasks", "Assistant", "Settings"]) {
       await go(tab, "nav.tabbar");
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

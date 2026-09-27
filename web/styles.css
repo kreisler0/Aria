@@ -86,6 +86,8 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; min-height: 100%; }
+/* Keep Safari from inflating text on rotation. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -179,7 +181,7 @@ main { min-width: 0; padding: 36px clamp(16px, 4vw, 52px) 150px; max-width: 1120
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  main { padding: 22px 16px 190px; }
+  main { padding: max(22px, calc(env(safe-area-inset-top) + 10px)) max(16px, env(safe-area-inset-right)) 190px max(16px, env(safe-area-inset-left)); }
   .tabbar { display: block; position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 20; }
   .tabbar-inner { display: flex; padding: 6px; border-radius: 30px; box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), var(--glass-shadow-lg); }
   .tabbar .nav { flex-direction: row; flex: 1; }
@@ -303,7 +305,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .ai-bar form:focus-within .spark { animation: twinkle 0.8s var(--spring); }
 @keyframes pulse { 50% { transform: scale(1.2); opacity: 0.7; } }
 @keyframes twinkle { 0% { transform: scale(0.7) rotate(-30deg); } 100% { transform: scale(1) rotate(0); } }
-.ai-bar textarea, .ai-bar textarea:focus, .ai-bar textarea:focus-visible { flex: 1; border: 0; background: none; resize: none; outline: none; box-shadow: none; padding: 9px 0; max-height: 140px; line-height: 1.4; font-size: 15.5px; }
+.ai-bar textarea, .ai-bar textarea:focus, .ai-bar textarea:focus-visible { flex: 1; border: 0; background: none; resize: none; outline: none; box-shadow: none; padding: 9px 0; max-height: 140px; line-height: 1.4; font-size: 16px; }
 .ai-bar textarea::placeholder { color: var(--muted); }
 .ai-bar .send { width: 40px; height: 40px; border-radius: 50%; border: 0; color: #fff; display: grid; place-items: center; flex: none;
   background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 16px -6px var(--accent-glow);
@@ -389,7 +391,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 /* ---- Forms */
 .field { display: grid; justify-items: start; gap: 7px; margin-bottom: 15px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .input, input[type="text"], input[type="email"], input[type="password"], input[type="url"], input[type="date"], input[type="datetime-local"], input[type="time"], select, textarea.input, textarea.note {
-  width: 100%; padding: 11px 14px; border-radius: var(--radius-sm); border: 0; background: var(--field); color: var(--text); font-size: 15px;
+  width: 100%; padding: 11px 14px; border-radius: var(--radius-sm); border: 0; background: var(--field); color: var(--text); font-size: 16px;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06), inset 0 0 0 1px var(--glass-line);
   transition: box-shadow 0.3s var(--ease), background 0.3s, transform 0.5s var(--spring); }
 input:hover, select:hover, textarea.input:hover, textarea.note:hover { background: color-mix(in srgb, var(--field) 70%, var(--glass-strong)); }
@@ -473,3 +475,8 @@ input:disabled, textarea:disabled { opacity: 0.6; }
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
   .aurora i { animation: none; }
 }
+
+/* iOS zooms into any text field under 16px when it gets focus (and stays zoomed), so every
+   field is at least 16px. */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(16px, 1em) !important; }
+@media (max-width: 760px) { #toast { top: max(18px, calc(env(safe-area-inset-top) + 8px)); } }

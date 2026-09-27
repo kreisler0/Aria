@@ -103,6 +103,10 @@ const state = {
 let stopRealtime = null;
 let pollTimer = null;
 
+/** Put the cursor in a field automatically only with a mouse or trackpad: on phones it pops
+ *  the keyboard up uninvited (and older iOS zooms the page in). */
+const canAutofocus = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
+
 const openRouterKey = () => store.get(KEYS.openrouter) || "";
 const route = () => {
   const name = location.hash.replace(/^#\/?/, "");
@@ -274,7 +278,7 @@ function renderLogin(message = "", mode = "signin", resendTo = "") {
       renderLogin(error.message, mode, error.code === "email_not_confirmed" ? email : "");
     }
   });
-  (form.email.value ? form.password : form.email)?.focus();
+  if (canAutofocus()) (form.email.value ? form.password : form.email)?.focus();
 }
 
 // ---- The app
@@ -894,7 +898,7 @@ function openModal(html, onSubmit) {
       buttons.forEach((b) => (b.disabled = false));
     }
   });
-  form.querySelector("input, textarea")?.focus();
+  if (canAutofocus()) form.querySelector("input, textarea")?.focus();
   return form;
 }
 

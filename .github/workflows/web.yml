@@ -90,7 +90,7 @@ jobs:
           ARIA_SUPABASE_ANON_KEY: ${{ vars.ARIA_SUPABASE_ANON_KEY }}
         run: |
           mkdir -p _site
-          cp -r web/index.html web/styles.css web/icon.svg web/manifest.webmanifest web/js _site/
+          cp -r web/index.html web/styles.css web/icon.svg web/apple-touch-icon.png web/icon-512.png web/manifest.webmanifest web/js _site/
           if [ -n "$ARIA_SUPABASE_URL" ] && [ -n "$ARIA_SUPABASE_ANON_KEY" ]; then
             node -e 'console.log("window.ARIA_CONFIG = " + JSON.stringify({ supabaseUrl: process.env.ARIA_SUPABASE_URL, supabaseAnonKey: process.env.ARIA_SUPABASE_ANON_KEY }) + ";")' > _site/config.js
             node web/build.mjs "$ARIA_SUPABASE_URL" "$ARIA_SUPABASE_ANON_KEY"
