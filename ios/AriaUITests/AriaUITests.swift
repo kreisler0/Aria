@@ -92,9 +92,14 @@ final class AriaUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
         XCTAssertTrue(ui.showsText("Ada Lovelace"), "Settings shows the account")
         let signOut = app.buttons.matching(NSPredicate(format: "label == %@", "Sign Out"))
-        signOut.firstMatch.tap()
-        XCTAssertTrue(ui.waitFor { signOut.count >= 2 }, "Sign Out asks for confirmation")
-        signOut.element(boundBy: signOut.count - 1).tap()
+        let row = signOut.firstMatch
+        let rowFrame = row.frame
+        row.tap()
+        // The confirmation's own button: the row underneath is covered (an action sheet on
+        // iPhone, a popover on iPad).
+        let confirm = ui.waitForElement { signOut.allElementsBoundByIndex.first { $0.frame != rowFrame && $0.isHittable } }
+        XCTAssertNotNil(confirm, "Sign Out asks for confirmation")
+        confirm?.tap()
         XCTAssertTrue(app.staticTexts["Your planner, run by an assistant."].waitForExistence(timeout: 10))
     }
 
@@ -170,12 +175,12 @@ private struct UI {
         return XCTWaiter().wait(for: [gone], timeout: timeout) == .completed
     }
 
-    func waitFor(timeout: TimeInterval = 10, _ condition: @escaping () -> Bool) -> Bool {
+    func waitForElement(timeout: TimeInterval = 10, _ find: @escaping () -> XCUIElement?) -> XCUIElement? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if condition() { return true }
+            if let element = find() { return element }
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
-        return condition()
+        return find()
     }
 }

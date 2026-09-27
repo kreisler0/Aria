@@ -90,7 +90,7 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
-      - name: Start the ${{ matrix.family }} simulator (boots while the app builds)
+      - name: Pick the ${{ matrix.family }} simulator
         timeout-minutes: 5
         run: |
           xcrun simctl list runtimes
@@ -110,8 +110,6 @@ jobs:
           test -n "$UDID"
           xcrun simctl list devices | grep "$UDID"
           echo "UDID=$UDID" >> "$GITHUB_ENV"
-          # bootstatus boots the device and logs each stage (data migration, system apps…).
-          nohup xcrun simctl bootstatus "$UDID" -b > boot.log 2>&1 &
 
       - name: Build for testing (generic simulator)
         timeout-minutes: 15
@@ -124,11 +122,12 @@ jobs:
             | (grep --line-buffered -E "error:|^\*\*|^(Ld|CodeSign) " || true) \
             | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
 
-      - name: Wait for the simulator
+      # Booted after the build: on these small runners, booting while compiling slowed both.
+      - name: Boot the simulator
         timeout-minutes: 10
         run: |
-          cat boot.log
-          xcrun simctl bootstatus "$UDID" -b 2>&1 | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
+          xcrun simctl bootstatus "$UDID" -b 2>&1 | grep --line-buffered -vE "^\s*$|Status=" \
+            | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
           xcrun simctl list devices | grep "$UDID"
 
       - name: Run the UI tests
@@ -152,6 +151,5 @@ jobs:
           path: |
             build/UITests.xcresult
             build.log
-            boot.log
             test.log
           if-no-files-found: ignore
