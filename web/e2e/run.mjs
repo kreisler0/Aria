@@ -259,6 +259,7 @@ try {
   await step("assistant asks for a key, then runs tools through OpenRouter", async () => {
     await go("Assistant");
     await page.getByRole("note", { name: "Connect OpenRouter" }).waitFor();
+    await shot("assistant-empty");
     await page.getByRole("button", { name: "Add key" }).click();
     await page.getByLabel(/OpenRouter API key/).fill(OPENROUTER_KEY);
     await page.getByRole("button", { name: "Save key" }).click();

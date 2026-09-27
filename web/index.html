@@ -33,6 +33,12 @@
       <feGaussianBlur in="noise" stdDeviation="2" result="soft"/>
       <feDisplacementMap in="SourceGraphic" in2="soft" scale="38" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
+    <!-- "Goo": blurs shapes together then sharpens the edge, so dots merge like liquid. -->
+    <filter id="goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur"/>
+      <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="goo"/>
+      <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+    </filter>
   </svg>
   <div id="app" aria-live="polite">
     <div class="boot"><div class="spinner" role="status" aria-label="Loading"></div></div>

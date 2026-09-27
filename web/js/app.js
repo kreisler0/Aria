@@ -735,6 +735,30 @@ addEventListener("blur", () => {
   light.target = 0;
   wakeLight();
 });
+// Jelly: whatever you press squishes, then wobbles back like liquid.
+const JELLY = ".btn, .icon-btn, .nav-item, .seg button, .suggestions button, .swatch, .ai-bar .send, .cal-day, .week .item, .chip, .model-chip";
+document.addEventListener("pointerup", (e) => {
+  const el = e.target.closest?.(JELLY);
+  if (!el || reduceMotion()) return;
+  el.classList.remove("jelly");
+  void el.offsetWidth; // restart the animation
+  el.classList.add("jelly");
+  el.addEventListener("animationend", () => el.classList.remove("jelly"), { once: true });
+});
+
+// Stat cards tilt towards the pointer like a pane of glass.
+document.addEventListener("pointermove", (e) => {
+  const card = e.target.closest?.(".stat");
+  document.querySelectorAll(".stat.tilted").forEach((c) => c !== card && (c.classList.remove("tilted"), c.style.removeProperty("--rx"), c.style.removeProperty("--ry")));
+  if (!card || e.pointerType === "touch" || reduceMotion()) return;
+  const box = card.getBoundingClientRect();
+  const x = (e.clientX - box.left) / box.width - 0.5;
+  const y = (e.clientY - box.top) / box.height - 0.5;
+  card.classList.add("tilted");
+  card.style.setProperty("--rx", `${(-y * 10).toFixed(2)}deg`);
+  card.style.setProperty("--ry", `${(x * 12).toFixed(2)}deg`);
+}, { passive: true });
+
 // Panels move (scrolling, re-renders): keep them lit from the same point.
 addEventListener("scroll", wakeLight, { passive: true });
 
@@ -943,23 +967,36 @@ function viewAssistant() {
   const model = state.profile?.openrouter_model || DEFAULT_MODEL;
   const modelName = CURATED_MODELS.find((m) => m.id === model)?.name ?? model;
   const items = [...bubbles(state.conversation), ...state.extras];
-  const chat = items.map((b) => {
-    if (b.kind === "action") return `<div class="chip ${b.ok ? "" : "fail"}">${icon(b.ok ? "ok" : "fail")}${esc(b.text)}</div>`;
+  // Only messages that weren't on screen before bounce in.
+  const seen = state.chatSeen ?? items.length;
+  state.chatSeen = items.length;
+  const chat = items.map((b, i) => {
+    const fresh = i >= seen ? " fresh" : "";
+    if (b.kind === "action") return `<div class="chip${fresh} ${b.ok ? "" : "fail"}"><span class="chip-icon">${icon(b.ok ? "ok" : "fail")}</span>${esc(b.text)}</div>`;
     return b.kind === "assistant"
-      ? `<div class="bubble assistant md">${markdown(b.text)}</div>`
-      : `<div class="bubble ${b.kind}">${esc(b.text)}</div>`;
+      ? `<div class="bubble assistant md${fresh}">${markdown(b.text)}</div>`
+      : `<div class="bubble ${b.kind}${fresh}">${esc(b.text)}</div>`;
   }).join("");
+  const empty = items.length === 0 && !state.pending;
   return `
-    <div class="head"><div><h1>Assistant</h1><p class="subtitle" style="margin:4px 0 0">Using <b>${esc(modelName)}</b> · <a href="#settings" style="color:var(--accent)">change</a></p></div>
-      ${state.conversation.length ? '<button class="btn ghost" data-action="clear-chat">Clear conversation</button>' : ""}</div>
-    ${key ? "" : `<div class="card notice" role="note" aria-label="Connect OpenRouter"><div><b>Connect OpenRouter</b><div class="help">Aria uses your own OpenRouter key. It's stored only in this browser.</div></div><button class="btn primary" data-action="go-settings">Add key</button></div>`}
-    <div class="chat" id="chat">
-      ${items.length === 0 && !state.pending ? `<div class="empty" style="text-align:left;padding:8px 0"><strong>Ask Aria to plan for you.</strong>It can add, complete and delete tasks, and create, move or delete events.
-        <div class="suggestions">${SUGGESTIONS.map((s) => `<button data-action="suggest" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>` : ""}
-      ${chat}
-      ${state.pending ? '<div class="bubble assistant typing" aria-label="Aria is thinking"><i></i><i></i><i></i></div>' : ""}
-      <div id="chat-end"></div>
-    </div>`;
+    <section class="assistant-panel card ${empty ? "is-empty" : ""}" aria-label="Assistant">
+      <header class="assistant-head">
+        <div class="orb ${state.pending ? "thinking" : ""}" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
+        <div class="assistant-title">
+          <h1>Aria</h1>
+          <p class="subtitle"><span class="status">${state.pending ? '<span class="status-dot"></span>Thinking…' : "Your planning assistant"}</span><span class="sep">·</span><a href="#settings" class="model-chip">${esc(modelName)}</a></p>
+        </div>
+        ${state.conversation.length ? '<button class="btn ghost" data-action="clear-chat">Clear</button>' : ""}
+      </header>
+      ${key ? "" : `<div class="notice glass-inset" role="note" aria-label="Connect OpenRouter"><div><b>Connect OpenRouter</b><div class="help">Aria uses your own OpenRouter key, saved to your account.</div></div><button class="btn primary" data-action="go-settings">Add key</button></div>`}
+      <div class="chat" id="chat">
+        ${empty ? `<div class="assistant-empty"><strong>What should we plan?</strong><span>Aria can add, complete and delete tasks, and create, move or delete events — just ask.</span>
+          <div class="suggestions">${SUGGESTIONS.map((s, i) => `<button data-action="suggest" data-text="${esc(s)}" style="--i:${i}">${esc(s)}</button>`).join("")}</div></div>` : ""}
+        ${chat}
+        ${state.pending ? '<div class="bubble assistant typing fresh" aria-label="Aria is thinking"><span class="goo"><i></i><i></i><i></i></span></div>' : ""}
+        <div id="chat-end"></div>
+      </div>
+    </section>`;
 }
 
 async function ask(text) {
@@ -1529,6 +1566,7 @@ document.addEventListener("click", async (e) => {
         await state.client.clearConversation();
         state.conversation = [];
         state.extras = [];
+        state.chatSeen = 0;
         render();
       } catch (error) {
         fail(error);
