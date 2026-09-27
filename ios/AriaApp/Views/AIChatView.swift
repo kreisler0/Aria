@@ -95,19 +95,19 @@ struct AIChatView: View {
                 .onSubmit(send)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AriaTheme.smallRadius, style: .continuous))
+                .liquidGlass(cornerRadius: AriaTheme.smallRadius, interactive: true)
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 34))
                     .symbolRenderingMode(.hierarchical)
             }
+            .buttonStyle(PressableButtonStyle(scale: 0.86))
             .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isThinking)
             .accessibilityLabel("Send")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(maxWidth: 760)
-        .background(.bar)
     }
 
     private var apiKeyCard: some View {
@@ -152,9 +152,9 @@ struct AIChatView: View {
                         .font(.callout)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .liquidGlass(in: Capsule(), interactive: true)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
         }
         .padding(.vertical, 12)
@@ -180,15 +180,18 @@ private struct BubbleView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .foregroundStyle(.white)
-                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: AriaTheme.smallRadius, style: .continuous))
+                    .background(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                in: RoundedRectangle(cornerRadius: AriaTheme.smallRadius, style: .continuous))
+                    .shadow(color: Color.accentColor.opacity(0.3), radius: 10, y: 5)
             }
         case .assistant:
             HStack {
-                Text(LocalizedStringKey(bubble.text))
+                // Rendered Markdown, so replies never show stray asterisks.
+                Text(ChatMarkdown.attributed(bubble.text))
                     .textSelection(.enabled)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AriaTheme.smallRadius, style: .continuous))
+                    .liquidGlass(cornerRadius: AriaTheme.smallRadius)
                 Spacer(minLength: 48)
             }
         case .action(let succeeded):
@@ -197,7 +200,7 @@ private struct BubbleView: View {
                 .foregroundStyle(succeeded ? Color.green : Color.orange)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background((succeeded ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+                .liquidGlass(in: Capsule(), tint: succeeded ? .green : .orange)
         case .error:
             Label(bubble.text, systemImage: "exclamationmark.octagon.fill")
                 .font(.footnote)
@@ -217,7 +220,7 @@ private struct ThinkingIndicator: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(.regularMaterial, in: Capsule())
+            .liquidGlass(in: Capsule())
             .accessibilityLabel("Aria is thinking")
     }
 }

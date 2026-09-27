@@ -24,7 +24,7 @@ struct QuickAddView: View {
                 .lineLimit(1...4)
                 .focused($focused)
                 .padding(14)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: AriaTheme.smallRadius, style: .continuous))
+                .liquidGlass(cornerRadius: AriaTheme.smallRadius, interactive: true)
             HStack(spacing: 12) {
                 Button {
                     let title = text

@@ -38,10 +38,13 @@ struct SettingsView: View {
                                             Image(systemName: "checkmark")
                                                 .font(.footnote.weight(.bold))
                                                 .foregroundStyle(.white)
+                                                .transition(.scale.combined(with: .opacity))
                                         }
                                     }
+                                    .scaleEffect(model.accentName == accent.name ? 1.12 : 1)
+                                    .shadow(color: accent.color.opacity(0.45), radius: model.accentName == accent.name ? 8 : 0, y: 3)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressableButtonStyle(scale: 0.82))
                             .accessibilityLabel(accent.name.capitalized)
                             .accessibilityAddTraits(model.accentName == accent.name ? .isSelected : [])
                         }

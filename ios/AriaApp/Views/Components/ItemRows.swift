@@ -116,11 +116,9 @@ struct AIInputBar: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
-            .background(.regularMaterial, in: Capsule(style: .continuous))
-            .overlay(Capsule(style: .continuous).strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.12), radius: 18, y: 8)
+            .liquidGlass(in: Capsule(style: .continuous), interactive: true)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .accessibilityLabel("Ask Aria")
         .onAppear { greet.toggle() }
     }
