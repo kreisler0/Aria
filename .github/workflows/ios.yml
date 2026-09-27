@@ -90,9 +90,10 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
-      - name: Start the ${{ matrix.family }} simulator
+      - name: Start the ${{ matrix.family }} simulator (boots while the app builds)
         timeout-minutes: 5
         run: |
+          xcrun simctl list runtimes
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, re, sys
           family = sys.argv[1]
@@ -109,37 +110,39 @@ jobs:
           test -n "$UDID"
           xcrun simctl list devices | grep "$UDID"
           echo "UDID=$UDID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$UDID" || true
+          # bootstatus boots the device and logs each stage (data migration, system apps…).
+          nohup xcrun simctl bootstatus "$UDID" -b > boot.log 2>&1 &
 
-      - name: Build for testing
+      - name: Build for testing (generic simulator)
         timeout-minutes: 15
         run: |
           set -o pipefail
-          if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
-                 -destination "id=$UDID" -derivedDataPath build/DerivedData \
-                 CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
-                 build-for-testing > build.log 2>&1; then
-            grep -E "error:" build.log | sort -u | head -100
-            tail -60 build.log
-            exit 1
-          fi
-          tail -3 build.log
+          xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            build-for-testing 2>&1 | tee build.log \
+            | (grep --line-buffered -E "error:|^\*\*|^(Ld|CodeSign) " || true) \
+            | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
 
       - name: Wait for the simulator
-        timeout-minutes: 5
-        run: xcrun simctl bootstatus "$UDID" -b
+        timeout-minutes: 10
+        run: |
+          cat boot.log
+          xcrun simctl bootstatus "$UDID" -b 2>&1 | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
+          xcrun simctl list devices | grep "$UDID"
 
       - name: Run the UI tests
         timeout-minutes: 15
         run: |
           set -o pipefail
           xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build/DerivedData \
+            -destination "id=$UDID" -destination-timeout 120 -derivedDataPath build/DerivedData \
             -resultBundlePath build/UITests.xcresult \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
             -maximum-test-execution-time-allowance 240 \
             test-without-building 2>&1 | tee test.log \
-            | (grep --line-buffered -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)|Testing failed" || true)
+            | (grep --line-buffered -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)|Testing failed|Test session|Writing result" || true) \
+            | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
 
       - name: Upload UI test results
         if: failure()
@@ -149,5 +152,6 @@ jobs:
           path: |
             build/UITests.xcresult
             build.log
+            boot.log
             test.log
           if-no-files-found: ignore
