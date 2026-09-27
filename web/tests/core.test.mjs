@@ -261,3 +261,16 @@ test("Supabase URLs are normalised", () => {
   assert.equal(normalizeUrl("abc"), null);
   assert.equal(normalizeUrl("ftp://x"), null);
 });
+
+test("assistant replies render Markdown safely", async () => {
+  const { markdown } = await import("../js/markdown.js");
+  assert.equal(markdown("It's **10:40 PM on Sunday, 27 September 2026** (Australia/Sydney time)."),
+    "<p>It&#39;s <strong>10:40 PM on Sunday, 27 September 2026</strong> (Australia/Sydney time).</p>");
+  assert.equal(markdown("Today:\n- **Dentist** at 10\n- *Buy* `milk`\n\n1. one\n2. two"),
+    "<p>Today:</p><ul><li><strong>Dentist</strong> at 10</li><li><em>Buy</em> <code>milk</code></li></ul><ol><li>one</li><li>two</li></ol>");
+  assert.equal(markdown("<img src=x onerror=alert(1)> **hi**"), "<p>&lt;img src=x onerror=alert(1)&gt; <strong>hi</strong></p>");
+  assert.equal(markdown("[site](javascript:alert(1)) [ok](https://openrouter.ai)"),
+    '<p>[site](javascript:alert(1)) <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">ok</a></p>');
+  assert.equal(markdown("2 * 3 * 4 and snake_case_name"), "<p>2 * 3 * 4 and snake_case_name</p>");
+  assert.equal(markdown("## Plan\nline one\nline two"), "<p><strong>Plan</strong></p><p>line one<br>line two</p>");
+});

@@ -3,6 +3,7 @@ import { SupabaseClient, normalizeUrl } from "./supabase.js";
 import { OpenRouterClient, CURATED_MODELS, DEFAULT_MODEL } from "./openrouter.js";
 import { ToolExecutor } from "./executor.js";
 import { AssistantEngine, bubbles, contextMessages, logEntries } from "./assistant.js";
+import { markdown } from "./markdown.js";
 import { PRIORITY_LABELS, eventsOn, greeting, isOverdue, snapshotForPrompt, taskGroups, tasksDueOn, upcoming } from "./planner.js";
 import {
   addDays, dayKey, daysBetween, describeDue, displayEnd, eventTiming, firstDay, lastDay, longDay, monthTitle,
@@ -355,12 +356,12 @@ function renderShell() {
     <div class="shell">
       <nav class="sidebar" aria-label="Aria">
         <div class="brand"><img src="icon.svg" alt="">Aria</div>
-        ${nav()}
+        <div class="nav" data-liquid="sidebar">${nav()}</div>
         <div class="spacer"></div>
         <div class="sync" id="sync"><i></i><span></span></div>
       </nav>
       <main id="view" tabindex="-1"></main>
-      <nav class="tabbar" aria-label="Aria">${nav()}</nav>
+      <nav class="tabbar" aria-label="Aria"><div class="tabbar-inner"><div class="nav" data-liquid="tabbar">${nav()}</div></div></nav>
     </div>
     <div class="ai-bar" id="ai-bar">
       <form id="ai-form">
@@ -435,7 +436,69 @@ function render() {
   }
   renderSync();
   afterRender(name);
+  decorate(view.firstElementChild);
 }
+
+// ---- Motion: staggered entrances, the liquid selection pill, light that follows the pointer
+
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function decorate(view) {
+  if (view && !view.classList.contains("still")) {
+    view.querySelectorAll(".row").forEach((row, i) => row.style.setProperty("--i", Math.min(i, 14)));
+    view.querySelectorAll(".stat, .card").forEach((card, i) => card.style.setProperty("--i", i));
+  }
+  updateLiquids();
+}
+
+/** One glass pill per group (sidebar, tab bar, segmented controls) that slides — stretching
+ *  like a drop of liquid — to whichever item is selected. */
+const liquidPositions = new Map();
+function updateLiquids(animate = true) {
+  document.querySelectorAll("[data-liquid], .seg").forEach((group) => {
+    const key = group.dataset.liquid || group.getAttribute("aria-label") || "seg";
+    const active = group.querySelector(':scope > [aria-current="page"], :scope > [aria-pressed="true"]');
+    let pill = group.querySelector(":scope > .liquid");
+    if (!active || !active.offsetWidth) {
+      if (!active) pill?.remove();
+      return;
+    }
+    if (!pill) {
+      pill = document.createElement("span");
+      pill.className = "liquid";
+      pill.setAttribute("aria-hidden", "true");
+      group.prepend(pill);
+    }
+    group.classList.add("has-liquid");
+    const to = { x: active.offsetLeft, y: active.offsetTop, w: active.offsetWidth, h: active.offsetHeight };
+    const from = liquidPositions.get(key);
+    liquidPositions.set(key, to);
+    Object.assign(pill.style, { width: `${to.w}px`, height: `${to.h}px`, transform: `translate(${to.x}px, ${to.y}px)` });
+    if (!animate || !from || reduceMotion() || (from.x === to.x && from.y === to.y)) return;
+    const sideways = Math.abs(to.x - from.x) >= Math.abs(to.y - from.y);
+    const stretch = sideways ? "scale(1.14, 0.88)" : "scale(0.94, 1.12)";
+    pill.animate([
+      { transform: `translate(${from.x}px, ${from.y}px)`, width: `${from.w}px`, height: `${from.h}px` },
+      { transform: `translate(${(from.x + to.x) / 2}px, ${(from.y + to.y) / 2}px) ${stretch}`, offset: 0.4 },
+      { transform: `translate(${to.x}px, ${to.y}px)`, width: `${to.w}px`, height: `${to.h}px` },
+    ], { duration: 620, easing: "cubic-bezier(0.34, 1.45, 0.5, 1)" });
+  });
+}
+addEventListener("resize", () => updateLiquids(false));
+// Segmented buttons outside the re-rendered view (sheets, sign-in) change on click.
+document.addEventListener("click", () => requestAnimationFrame(() => updateLiquids()));
+
+const LIT = ".card, .btn, .row, .ai-bar form, .sidebar, .tabbar-inner, .suggestions button, .sheet, .glass";
+document.addEventListener("pointermove", (e) => {
+  const el = e.target.closest?.(LIT);
+  if (!el) return;
+  const box = el.getBoundingClientRect();
+  el.style.setProperty("--mx", `${e.clientX - box.left}px`);
+  el.style.setProperty("--my", `${e.clientY - box.top}px`);
+}, { passive: true });
+
+// Chromium can refract the backdrop through an SVG filter; others keep plain frosted glass.
+if (navigator.userAgentData?.brands?.some((b) => /Chromium/i.test(b.brand))) document.documentElement.classList.add("lg-refract");
 
 function afterRender(name) {
   if (name === "calendar") {
@@ -525,9 +588,10 @@ function viewTasks() {
         <button class="btn primary" data-action="new-task">${icon("plus")}New task</button>
       </div>
     </div>
-    <form class="card" id="quick-add-form" style="display:flex;gap:8px;padding:8px;margin-bottom:6px">
+    <form class="card quick-add" id="quick-add-form">
+      ${icon("plus")}
       <label class="sr-only" for="quick-add">Quick add</label>
-      <input id="quick-add" type="text" placeholder="Quick add a task — press Enter" style="border:0;background:none;box-shadow:none" autocomplete="off">
+      <input id="quick-add" type="text" placeholder="Quick add a task — press Enter" autocomplete="off">
     </form>
     ${body}`;
 }
@@ -632,7 +696,9 @@ function viewAssistant() {
   const items = [...bubbles(state.conversation), ...state.extras];
   const chat = items.map((b) => {
     if (b.kind === "action") return `<div class="chip ${b.ok ? "" : "fail"}">${icon(b.ok ? "ok" : "fail")}${esc(b.text)}</div>`;
-    return `<div class="bubble ${b.kind}">${esc(b.text)}</div>`;
+    return b.kind === "assistant"
+      ? `<div class="bubble assistant md">${markdown(b.text)}</div>`
+      : `<div class="bubble ${b.kind}">${esc(b.text)}</div>`;
   }).join("");
   return `
     <div class="head"><div><h1>Assistant</h1><p class="subtitle" style="margin:4px 0 0">Using <b>${esc(modelName)}</b> · <a href="#settings" style="color:var(--accent)">change</a></p></div>
@@ -744,12 +810,25 @@ function viewSettings() {
 // ---- Editors
 
 function closeModal() {
-  $("#modal-root").innerHTML = "";
+  const root = $("#modal-root");
+  const sheet = root.firstElementChild;
+  if (!sheet) return;
+  if (reduceMotion()) {
+    root.innerHTML = "";
+    return;
+  }
+  // Let the sheet sink away before it's removed.
+  root.classList.add("closing");
+  setTimeout(() => {
+    if (root.firstElementChild === sheet) root.innerHTML = "";
+    root.classList.remove("closing");
+  }, 230);
 }
 
 function openModal(html, onSubmit) {
   const root = $("#modal-root");
   const opener = document.activeElement;
+  root.classList.remove("closing");
   root.innerHTML = `<div class="backdrop"><form class="sheet" role="dialog" aria-modal="true" novalidate>${html}</form></div>`;
   const form = root.querySelector("form");
   const close = () => {

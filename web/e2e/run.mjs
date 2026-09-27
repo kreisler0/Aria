@@ -36,7 +36,7 @@ const server = createServer(async (req, res) => {
   }
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
-const APP = process.env.ARIA_E2E_URL ?? `http://127.0.0.1:${server.address().port}/`;
+const APP = process.env.ARIA_E2E_URL || `http://127.0.0.1:${server.address().port}/`;
 
 // ---- Helpers
 const email = `web-e2e-${Date.now()}@aria.test`;
@@ -121,7 +121,7 @@ await page.route("https://openrouter.ai/api/v1/**", async (route) => {
       function: { name: "create_task", arguments: JSON.stringify({ title: "Finish essay", due_at: `${localDay(tomorrow)}T17:00:00${offset}`, priority: 3 }) },
     }] } }] } });
   }
-  return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "Added 'Finish essay' due tomorrow at 5pm." } }] } });
+  return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "Added **Finish essay** — due *tomorrow at 5pm*." } }] } });
 });
 
 let token = null;
@@ -186,7 +186,9 @@ try {
 
     await page.getByRole("button", { name: "New task" }).click();
     await page.getByRole("dialog").getByLabel("Title").fill("Pay rent");
+    await shot("task-sheet");
     await page.getByRole("dialog").getByRole("button", { name: "High" }).click();
+    assert.equal(await page.getByRole("dialog").getByLabel("Due", { exact: true }).isVisible(), false, "no due field until the switch is on");
     await page.getByRole("dialog").getByLabel("Due date").check();
     await page.getByRole("dialog").getByLabel("Due", { exact: true }).fill(`${localDay(new Date())}T23:30`);
     await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
@@ -226,7 +228,9 @@ try {
 
     await page.getByRole("button", { name: "New event" }).click();
     await page.getByRole("dialog").getByLabel("Title").fill("Conference");
+    assert.equal(await page.getByRole("dialog").getByLabel("First day").isVisible(), false);
     await page.getByRole("dialog").getByLabel("All day").check();
+    assert.equal(await page.getByRole("dialog").getByLabel("Starts").isVisible(), false);
     await page.getByRole("dialog").getByLabel("First day").fill(localDay(tomorrow));
     await page.getByRole("dialog").getByLabel("Last day").fill(localDay(new Date(tomorrow.getTime() + 86_400_000)));
     await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
@@ -270,7 +274,9 @@ try {
     await go("Today");
     await page.getByLabel("Ask Aria").fill("Add finish essay due tomorrow at 5pm, high priority");
     await page.getByLabel("Ask Aria").press("Enter");
-    await page.getByText("Added 'Finish essay' due tomorrow at 5pm.").waitFor();
+    // Markdown in replies is rendered, not shown as asterisks.
+    await page.locator(".bubble.assistant strong", { hasText: "Finish essay" }).waitFor();
+    assert.equal(await page.locator(".bubble.assistant").last().innerText(), "Added Finish essay — due tomorrow at 5pm.");
     await page.locator(".chip").filter({ hasText: "Added “Finish essay” · due" }).waitFor();
 
     assert.equal(aiRequests.length, 2);
@@ -405,8 +411,9 @@ try {
     const grant = await (await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
     })).json();
-    await page.goto("about:blank");
-    await page.goto(`${APP}#access_token=${grant.access_token}&expires_in=3600&refresh_token=${grant.refresh_token}&token_type=bearer&type=signup`);
+    const fragment = `access_token=${grant.access_token}&expires_in=3600&refresh_token=${grant.refresh_token}&token_type=bearer&type=signup`;
+    await page.evaluate((hash) => (location.hash = hash), fragment);
+    await page.reload();
     await page.locator("nav.sidebar").waitFor();
     assert.ok(!(await page.evaluate(() => location.href)).includes("access_token"), "tokens are removed from the address bar");
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("aria.session")).user.email), email);
