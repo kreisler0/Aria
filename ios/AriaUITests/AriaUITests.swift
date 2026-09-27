@@ -69,8 +69,8 @@ final class AriaUITests: XCTestCase {
         // Assistant: asks for an OpenRouter key and shows the conversation.
         ui.openLink("aria://assistant")
         XCTAssertTrue(ui.element("Connect OpenRouter").waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Added 'Finish essay' for Friday at 5pm."].exists)
-        XCTAssertTrue(app.staticTexts["Created task 'Finish essay'"].exists)
+        XCTAssertTrue(ui.showsText("Added 'Finish essay' for Friday at 5pm."), "shows the reply")
+        XCTAssertTrue(ui.showsText("Created task 'Finish essay'"), "shows the change the assistant made")
         app.buttons["Done"].tap()
         XCTAssertTrue(ui.disappears(ui.element("Connect OpenRouter")))
 
