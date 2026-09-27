@@ -373,6 +373,48 @@ export class SupabaseClient {
     return this.rest("DELETE", "devices", { device_id: `eq.${deviceId}` }, undefined, "return=minimal");
   }
 
+  // iCloud Calendar (the icloud-sync Edge Function does the talking to iCloud).
+
+  async fetchCalendarAccount() {
+    const rows = await this.rest("GET", "calendar_accounts", {
+      select: "username,calendars,selected,default_calendar,status,last_error,last_synced_at",
+    });
+    return rows?.[0] ?? null;
+  }
+
+  /** Which calendars show in Aria, and where new events go. (return=minimal: the row has a
+   *  column clients can't read.) */
+  updateCalendarSelection(fields) {
+    return this.rest("PATCH", "calendar_accounts", { user_id: `eq.${this.user.id}` }, fields, "return=minimal");
+  }
+
+  fetchCalendarLinks() {
+    return this.rest("GET", "calendar_links", { select: "event_id,calendar_url,origin,read_only" });
+  }
+
+  /** connect {username, password} | sync | disconnect */
+  async calendarAction(action, fields = {}) {
+    const send = async (token) => {
+      try {
+        return await this.fetch(`${this.url}/functions/v1/icloud-sync`, {
+          method: "POST",
+          headers: { apikey: this.anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ...fields }),
+        });
+      } catch {
+        throw new SupabaseError("Couldn't reach the calendar service. Check your connection.");
+      }
+    };
+    let response = await send(await this.accessToken());
+    if (response.status === 401 && action !== "connect") response = await send(await this.refresh());
+    const json = await response.json().catch(() => ({}));
+    if (response.status === 404 && !json.error?.includes("isn't connected")) {
+      throw new SupabaseError("iCloud sync isn't installed on this Supabase project yet.", 404, "not_installed");
+    }
+    if (!response.ok) throw new SupabaseError(json.error || json.message || `Calendar sync failed (${response.status}).`, response.status, json.code ?? "");
+    return json;
+  }
+
   // ---- Realtime
 
   /** Live changes to tasks, events and planner days; `onChange({table, type, id})`. Returns a stop function. */

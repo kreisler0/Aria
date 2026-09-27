@@ -38,6 +38,17 @@ jobs:
           set -a; source supabase.env; set +a
           echo "SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
           echo "SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+
+      - name: Edge Function tests (iCloud sync against a fake iCloud)
+        run: node --experimental-strip-types --test --test-concurrency=1 supabase/functions/icloud-sync/tests/*.test.ts
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check the Edge Function for Deno
+        working-directory: supabase/functions/icloud-sync
+        run: deno check index.ts lib/*.ts
 
       - name: Install Playwright + Chromium
         run: |
@@ -46,7 +57,7 @@ jobs:
 
       - name: End-to-end (served over http)
         working-directory: web
-        run: node e2e/run.mjs
+        run: node --experimental-strip-types e2e/run.mjs
 
       - name: Build the single-file app
         working-directory: web
@@ -54,7 +65,7 @@ jobs:
 
       - name: End-to-end (single file opened from disk)
         working-directory: web
-        run: ARIA_E2E_URL="file://$PWD/dist/Aria.html" ARIA_E2E_OUT=e2e/out-file node e2e/run.mjs
+        run: ARIA_E2E_URL="file://$PWD/dist/Aria.html" ARIA_E2E_OUT=e2e/out-file node --experimental-strip-types e2e/run.mjs
 
       - uses: actions/upload-artifact@v4
         if: always()

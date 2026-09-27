@@ -1,0 +1,87 @@
+name: Supabase deploy
+
+# Applies supabase/migrations to the Aria Supabase project and deploys the icloud-sync Edge
+# Function, on every push to the default branch that touches supabase/.
+#
+# One-time setup (repository ▸ Settings ▸ Secrets and variables ▸ Actions ▸ New secret):
+#   SUPABASE_ACCESS_TOKEN  supabase.com/dashboard/account/tokens ▸ Generate new token
+#   SUPABASE_DB_PASSWORD   the database password (Project Settings ▸ Database; reset it
+#                          there if you don't know it)
+# The project is the one in web/config.js, unless the repository variable
+# SUPABASE_PROJECT_REF says otherwise.
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["supabase/**", ".github/workflows/supabase-deploy.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate the database and deploy Edge Functions
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the secrets are set
+        run: |
+          missing=""
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || missing="$missing SUPABASE_ACCESS_TOKEN"
+          [ -n "$SUPABASE_DB_PASSWORD" ] || missing="$missing SUPABASE_DB_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Add these repository secrets to deploy to Supabase:$missing (see the top of .github/workflows/supabase-deploy.yml)"
+            exit 1
+          fi
+
+      - name: Find the project
+        env:
+          REF_VAR: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: |
+          ref="$REF_VAR"
+          if [ -z "$ref" ]; then
+            ref=$(grep -oE 'https://[a-z0-9]+\.supabase\.co' web/config.js | head -1 | sed -E 's#https://([a-z0-9]+)\.supabase\.co#\1#')
+          fi
+          if [ -z "$ref" ]; then echo "::error::No project: set the SUPABASE_PROJECT_REF variable or the URL in web/config.js"; exit 1; fi
+          echo "PROJECT_REF=$ref" >> "$GITHUB_ENV"
+          echo "Project: $ref"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link the project
+        run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Apply database migrations
+        # Every migration is safe to re-run, so projects set up by pasting SQL by hand
+        # are brought under management without errors.
+        run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Make sure the encryption key exists
+        # Generated once; never printed. Changing it would make saved iCloud passwords
+        # unreadable, so an existing key is left alone.
+        run: |
+          if supabase secrets list --project-ref "$PROJECT_REF" | grep -q ARIA_ENCRYPTION_KEY; then
+            echo "ARIA_ENCRYPTION_KEY already set."
+          else
+            supabase secrets set --project-ref "$PROJECT_REF" "ARIA_ENCRYPTION_KEY=$(openssl rand -hex 32)" > /dev/null
+            echo "ARIA_ENCRYPTION_KEY created."
+          fi
+
+      - name: Deploy the icloud-sync function
+        run: supabase functions deploy icloud-sync --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Smoke test
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS "https://$PROJECT_REF.supabase.co/functions/v1/icloud-sync")
+          echo "OPTIONS icloud-sync → $status"
+          [ "$status" = "204" ] || [ "$status" = "200" ]

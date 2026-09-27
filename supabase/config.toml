@@ -36,3 +36,8 @@ enable_signup = true
 enable_signup = true
 # Local stacks have no mail server; hosted projects should keep confirmations on.
 enable_confirmations = false
+
+# iCloud Calendar sync. pg_cron calls it without a user token, so the gateway's JWT check is
+# off; the function verifies the caller itself (user token, or pg_cron's private token).
+[functions.icloud-sync]
+verify_jwt = false

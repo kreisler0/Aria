@@ -491,3 +491,14 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 
 .presence i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
 .presence.online { color: var(--ok); font-weight: 560; }
 .presence.online i { background: var(--ok); animation: breathe 2.4s ease-in-out infinite; }
+
+/* ---- Calendars */
+.cal-list { padding: 0; }
+.cal-item { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--glass-line); }
+.cal-item:last-child { border-bottom: 0; }
+.cal-item .main { flex: 1; font-weight: 550; }
+.cal-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 8%, transparent); }
+.pill.icloud { background: color-mix(in srgb, var(--accent-2) 14%, transparent); color: var(--text); gap: 5px; }
+.pill.icloud .cal-dot { width: 7px; height: 7px; box-shadow: none; }
+.spinner.small { width: 14px; height: 14px; border-width: 2px; }
+.switch:disabled { opacity: 0.55; cursor: default; }

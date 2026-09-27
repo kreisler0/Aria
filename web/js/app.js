@@ -55,6 +55,7 @@ const ICONS = {
   desktop: '<rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/>',
   phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.8"/><path d="M11 18.5h2"/>',
   tablet: '<rect x="4.5" y="2.5" width="15" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  cloud: '<path d="M7 18h10a4 4 0 00.6-7.95A5.5 5.5 0 007.1 9.2 4.4 4.4 0 007 18z"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const icon = (name, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ICONS[name]}</svg>`;
@@ -103,6 +104,9 @@ const state = {
   cal: { mode: "month", selected: dayKey(new Date()), month: dayKey(new Date()).slice(0, 8) + "01" },
   note: { key: null, text: "", loaded: false },
   devices: null, // null = not loaded; false = the backend has no devices table yet
+  // iCloud Calendar: account undefined = not loaded, null = not connected; problem is
+  // "unsupported" (no tables yet) or "not_installed" (no Edge Function yet).
+  calendar: { account: undefined, problem: null, syncing: false, lastSync: 0, links: new Map() },
   keySynced: null, // whether the account has a synced key (null = unknown)
 };
 let stopRealtime = null;
@@ -186,6 +190,7 @@ function signedOut(message) {
   store.set(KEYS.openrouter, null);
   state.keySynced = null;
   state.devices = null;
+  state.calendar = { account: undefined, problem: null, syncing: false, lastSync: 0, links: new Map() };
   stopRealtime?.();
   stopRealtime = null;
   clearInterval(pollTimer);
@@ -381,12 +386,95 @@ async function loadDevices() {
   if (route() === "settings") render();
 }
 
+// ---- iCloud Calendar
+
+async function loadCalendarAccount() {
+  try {
+    state.calendar.account = await state.client.fetchCalendarAccount();
+    state.calendar.problem = null;
+    if (state.calendar.account) await loadCalendarLinks();
+  } catch (error) {
+    state.calendar.account = null;
+    state.calendar.problem = missingTable(error) ? "unsupported" : null;
+  }
+}
+
+async function loadCalendarLinks() {
+  try {
+    const rows = await state.client.fetchCalendarLinks();
+    state.calendar.links = new Map(rows.map((l) => [l.event_id, { readOnly: l.read_only, calendarUrl: l.calendar_url, origin: l.origin }]));
+  } catch {
+    state.calendar.links = new Map();
+  }
+}
+
+/** Two-way sync with iCloud now (on open, on return, after edits). Quiet: no toasts. */
+async function syncCalendar({ quiet = true, force = false } = {}) {
+  const cal = state.calendar;
+  if (!state.started || !cal.account || cal.syncing) return;
+  if (!force && Date.now() - cal.lastSync < 120_000) return;
+  cal.syncing = true;
+  cal.lastSync = Date.now();
+  if (route() === "settings") render();
+  try {
+    const result = await state.client.calendarAction("sync");
+    if (result.account) cal.account = result.account;
+    await Promise.all([loadCalendarLinks(), loadEvents()]);
+    const s = result.summary ?? {};
+    const changes = (s.imported ?? 0) + (s.updatedInAria ?? 0) + (s.deletedInAria ?? 0);
+    if (!quiet) toast(changes ? `Synced with iCloud · ${changes} change${changes === 1 ? "" : "s"}` : "Synced with iCloud");
+  } catch (error) {
+    if (error.code === "not_installed") cal.problem = "not_installed";
+    await loadCalendarAccount();
+    if (!quiet) fail(error);
+  } finally {
+    cal.syncing = false;
+    render();
+  }
+}
+
+let calendarSyncTimer = null;
+/** After Aria changes an event: push it to iCloud shortly (edits often come in bursts). */
+function calendarChanged() {
+  if (!state.calendar.account) return;
+  clearTimeout(calendarSyncTimer);
+  calendarSyncTimer = setTimeout(() => syncCalendar({ force: true }), 3000);
+}
+
+const calendarLink = (event) => state.calendar.links.get(event.id);
+const isReadOnlyEvent = (event) => !!calendarLink(event)?.readOnly;
+
+/** The planner data the assistant works with: iCloud's repeating and read-only events
+ *  can't be changed from Aria (iCloud would put them back). */
+function assistantData() {
+  const client = state.client;
+  const guard = async (id) => {
+    const link = state.calendar.links.get(id);
+    if (link?.readOnly) {
+      const event = await client.fetchEvent(id);
+      throw new Error(`“${event?.title ?? "That event"}” is a repeating or read-only iCloud event. Change it in the Calendar app.`);
+    }
+  };
+  return new Proxy(client, {
+    get(target, name) {
+      if (name === "updateEvent") return async (id, fields) => (await guard(id), target.updateEvent(id, fields));
+      if (name === "deleteEvent") return async (id) => (await guard(id), target.deleteEvent(id));
+      const value = target[name];
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 function startApp() {
   state.started = true;
   renderShell();
   loadAll();
   syncKey().then(() => state.started && render());
   startHeartbeat().then(loadDevices);
+  loadCalendarAccount().then(() => {
+    render();
+    syncCalendar({ force: true });
+  });
   stopRealtime?.();
   stopRealtime = state.client.subscribe(onRemoteChange, (status) => {
     state.live = status;
@@ -454,6 +542,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && state.started) {
     refresh();
     syncKey().then(render);
+    syncCalendar();
     checkIn();
   }
 });
@@ -691,8 +780,16 @@ function eventRow(event, day = dayKey(new Date())) {
     : `${timeLabel(event.startAt)} – ${timeLabel(event.endAt)}`;
   return `<li class="row clickable" data-action="edit-event" data-id="${event.id}">
     <span class="time">${esc(time)}</span><span class="bar ${event.allDay ? "allday" : ""}"></span>
-    <div class="main"><div class="title">${esc(event.title)}</div><div class="meta">${esc(detail)}${event.source === "ai" ? ' <span class="pill ai">Aria</span>' : ""}</div></div>
+    <div class="main"><div class="title">${esc(event.title)}</div><div class="meta">${esc(detail)}${event.source === "ai" ? ' <span class="pill ai">Aria</span>' : ""}${calendarPill(event)}</div></div>
   </li>`;
+}
+
+function calendarPill(event) {
+  const link = calendarLink(event);
+  if (!link) return "";
+  const cal = state.calendar.account?.calendars?.find((c) => c.url === link.calendarUrl);
+  const dot = cal?.color ? `<i class="cal-dot" style="background:${esc(cal.color)}"></i>` : "";
+  return ` <span class="pill icloud" title="${esc(cal?.name ?? "iCloud")}">${dot}${esc(cal?.name ?? "iCloud")}</span>`;
 }
 
 const loading = () => '<div class="empty"><div class="spinner" style="margin:auto"></div></div>';
@@ -876,7 +973,7 @@ async function ask(text) {
   render();
   const started = new Date();
   try {
-    const engine = new AssistantEngine(new OpenRouterClient(openRouterKey), new ToolExecutor(state.client));
+    const engine = new AssistantEngine(new OpenRouterClient(openRouterKey), new ToolExecutor(assistantData()));
     const model = state.profile?.openrouter_model || DEFAULT_MODEL;
     const reply = await engine.respond(text, model, contextMessages(state.conversation), snapshotForPrompt(state.tasks, state.events, started), started);
     const rows = logEntries(reply, started);
@@ -887,7 +984,10 @@ async function ask(text) {
     } catch {
       toast("The reply couldn't be saved to your history.", "error");
     }
-    if (reply.outcomes.some((o) => o.mutation)) await refresh();
+    if (reply.outcomes.some((o) => o.mutation)) {
+      await refresh();
+      if (reply.outcomes.some((o) => /^event/.test(o.mutation?.type ?? ""))) calendarChanged();
+    }
   } catch (error) {
     state.extras.push({ kind: "error", text: error.message || "Something went wrong." });
   } finally {
@@ -930,6 +1030,79 @@ function devicesList() {
   }).join("")}</ul>`;
 }
 
+function calendarsSettings() {
+  const cal = state.calendar;
+  if (cal.problem === "unsupported") {
+    return '<div class="empty">Your Supabase project needs the latest database update to connect iCloud Calendar.</div>';
+  }
+  if (cal.account === undefined) return loading();
+  if (!cal.account) {
+    return `<div class="set-row"><div><div class="label">iCloud Calendar</div>
+        <div class="help">Show your iCloud calendars in Aria and keep them in sync both ways, on every device.</div></div>
+        <button class="btn primary" data-action="connect-icloud">${icon("cloud")}Connect iCloud</button></div>
+      ${cal.problem === "not_installed" ? '<p class="help error-text" style="margin:0 0 12px">The iCloud sync service isn\'t installed on this Supabase project yet.</p>' : ""}`;
+  }
+  const a = cal.account;
+  const writable = a.calendars.filter((c) => !c.readOnly);
+  const synced = a.last_synced_at ? `Synced ${relativeTime(new Date(a.last_synced_at))}` : "Not synced yet";
+  const status = cal.syncing ? "Syncing…" : a.status === "error" ? "Needs attention" : synced;
+  return `
+    <div class="set-row"><div><div class="label">iCloud · ${esc(a.username)}</div>
+        <div class="help ${a.status === "error" ? "error-text" : ""}" style="margin:2px 0 0">${esc(a.status === "error" ? a.last_error ?? "Sync failed." : status)}</div></div>
+      <button class="btn" data-action="sync-icloud" ${cal.syncing ? "disabled" : ""}>${cal.syncing ? '<span class="spinner small"></span>' : ""}Sync now</button></div>
+    <div class="set-row stack"><div class="label" style="margin-bottom:6px">Show in Aria</div>
+      <ul class="list cal-list">${a.calendars.map((c) => `
+        <li class="cal-item"><i class="cal-dot" style="background:${esc(c.color ?? "var(--accent)")}"></i>
+          <span class="main">${esc(c.name)}${c.readOnly ? ' <span class="pill">Read-only</span>' : ""}</span>
+          <input type="checkbox" class="switch" data-action="toggle-calendar" data-url="${esc(c.url)}" aria-label="Show ${esc(c.name)}" ${a.selected.includes(c.url) ? "checked" : ""} ${c.url === a.default_calendar ? "disabled" : ""}></li>`).join("")}
+      </ul></div>
+    ${writable.length ? `<div class="set-row"><label class="label" for="default-calendar">New events go to</label>
+      <select id="default-calendar" style="width:auto;min-width:180px">${writable.map((c) => `<option value="${esc(c.url)}" ${c.url === a.default_calendar ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div>` : ""}
+    <div class="set-row"><span class="help">Syncs when you open Aria and every 10 minutes. Repeating events can be changed in the Calendar app.</span>
+      <button class="btn danger" data-action="disconnect-icloud">Disconnect</button></div>`;
+}
+
+function relativeTime(date) {
+  const minutes = Math.round((Date.now() - date) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours} h ago` : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function connectICloud() {
+  openModal(`
+    <h2>Connect iCloud Calendar</h2>
+    <p class="help" style="margin:-8px 0 16px">Aria needs an <b>app-specific password</b> — not your Apple ID password. Create one at
+      <a href="https://account.apple.com/account/manage" target="_blank" rel="noopener">account.apple.com</a> ▸ Sign-In and Security ▸ App-Specific Passwords.</p>
+    <label class="field">Apple ID email<input type="email" name="username" autocomplete="username" placeholder="you@icloud.com" required></label>
+    <label class="field">App-specific password<input type="password" name="password" autocomplete="off" placeholder="xxxx-xxxx-xxxx-xxxx" required></label>
+    <p class="help">It's encrypted and stored in your Aria backend, used only to sync your calendars. You can revoke it at account.apple.com at any time.</p>
+    <p class="error-text" data-error hidden></p>
+    <div class="actions">
+      <button class="btn" type="button" data-cancel>Cancel</button>
+      <button class="btn primary" type="submit" value="connect">Connect</button>
+    </div>`, async (f) => {
+    const button = f.querySelector("button[value=connect]");
+    button.textContent = "Connecting to iCloud…";
+    try {
+      const result = await state.client.calendarAction("connect", { username: f.username.value.trim(), password: f.password.value });
+      state.calendar.account = result.account;
+      state.calendar.problem = null;
+      state.calendar.lastSync = Date.now();
+      await Promise.all([loadCalendarLinks(), loadEvents()]);
+      const n = result.summary?.imported ?? 0;
+      toast(`iCloud connected · ${n} event${n === 1 ? "" : "s"} imported`);
+      render();
+    } catch (error) {
+      if (error.code === "not_installed") state.calendar.problem = "not_installed";
+      Object.assign(f.querySelector("[data-error]"), { hidden: false, textContent: error.message });
+      button.textContent = "Connect";
+      return false;
+    }
+  });
+}
+
 function viewSettings() {
   const user = state.client.user;
   const key = openRouterKey();
@@ -951,6 +1124,9 @@ function viewSettings() {
 
       <h2>Devices</h2>
       <div class="card devices">${devicesList()}</div>
+
+      <h2>Calendars</h2>
+      <div class="card calendars">${calendarsSettings()}</div>
 
       <h2>Assistant</h2>
       <div class="card">
@@ -1103,8 +1279,10 @@ function editEvent(event = null, day = null) {
   const allDay = event?.allDay ?? false;
   const first = event?.allDay ? firstDay(event) : dayKey(start);
   const last = event?.allDay ? lastDay(event) : dayKey(end);
+  const readOnly = event && isReadOnlyEvent(event);
   const form = openModal(`
-    <h2>${event ? "Edit Event" : "New Event"}</h2>
+    <h2>${readOnly ? "iCloud Event" : event ? "Edit Event" : "New Event"}</h2>
+    ${readOnly ? '<p class="help" style="margin:-8px 0 16px">This repeating or read-only event comes from iCloud. Change it in the Calendar app on your iPhone, iPad or Mac.</p>' : ""}
     <label class="field">Title<input type="text" name="title" value="${esc(event?.title)}" maxlength="500" required></label>
     <label class="toggle">All day <input type="checkbox" class="switch" name="allDay" ${allDay ? "checked" : ""}></label>
     <div class="grid2" data-timed ${allDay ? "hidden" : ""}>
@@ -1117,16 +1295,20 @@ function editEvent(event = null, day = null) {
     </div>
     <label class="field">Notes<textarea class="input" name="notes" rows="3">${esc(event?.notes)}</textarea></label>
     ${event?.iosCalendarEventId ? '<p class="help">Linked to your iPhone calendar — changes sync back to it.</p>' : ""}
+    ${event && calendarLink(event) && !readOnly ? '<p class="help">Synced with iCloud Calendar — changes show up there too.</p>' : ""}
     <p class="error-text" data-error hidden></p>
     <div class="actions">
+      ${readOnly ? '<button class="btn primary" type="button" data-cancel>Done</button>' : `
       ${event ? `<button class="btn danger left" type="submit" value="delete">${icon("trash")}Delete</button>` : ""}
       <button class="btn" type="button" data-cancel>Cancel</button>
-      <button class="btn primary" type="submit" value="save">Save</button>
+      <button class="btn primary" type="submit" value="save">Save</button>`}
     </div>`, async (f, action) => {
+    if (readOnly) return;
     if (action === "delete") {
       await state.client.deleteEvent(event.id);
       state.events = state.events.filter((e) => e.id !== event.id);
       toast(`Deleted “${event.title}”`);
+      calendarChanged();
       return render();
     }
     const title = f.title.value.trim();
@@ -1150,8 +1332,10 @@ function editEvent(event = null, day = null) {
     const fields = { title, notes: f.notes.value.trim() || null, startAt, endAt, allDay: isAllDay };
     const saved = event ? await state.client.updateEvent(event.id, fields) : await state.client.createEvent({ ...fields, source: "user" });
     upsert(state.events, saved);
+    calendarChanged();
     render();
   });
+  if (readOnly) form.querySelectorAll("input, textarea").forEach((el) => (el.disabled = true));
   form.allDay.addEventListener("change", () => {
     form.querySelector("[data-timed]").hidden = form.allDay.checked;
     form.querySelector("[data-allday]").hidden = !form.allDay.checked;
@@ -1215,6 +1399,25 @@ document.addEventListener("change", async (e) => {
     render();
   } else if (t.id === "model-select") {
     setModel(t.value);
+  } else if (t.dataset.action === "toggle-calendar" || t.id === "default-calendar") {
+    const a = state.calendar.account;
+    const selected = new Set(a.selected);
+    let defaultCalendar = a.default_calendar;
+    if (t.id === "default-calendar") {
+      defaultCalendar = t.value;
+      selected.add(t.value);
+    } else if (t.checked) selected.add(t.dataset.url);
+    else selected.delete(t.dataset.url);
+    const fields = { selected: [...selected], default_calendar: defaultCalendar };
+    try {
+      await state.client.updateCalendarSelection(fields);
+      Object.assign(a, fields);
+      render();
+      syncCalendar({ force: true });
+    } catch (error) {
+      fail(error);
+      render();
+    }
   }
 });
 
@@ -1347,6 +1550,21 @@ document.addEventListener("click", async (e) => {
       state.keySynced = false;
       toast("Key removed from your account");
       return render();
+    case "connect-icloud": return connectICloud();
+    case "sync-icloud": return syncCalendar({ quiet: false, force: true });
+    case "disconnect-icloud":
+      if (!confirm("Disconnect iCloud Calendar? Its events are removed from Aria (they stay in iCloud); events you made in Aria stay.")) return;
+      try {
+        const result = await state.client.calendarAction("disconnect");
+        state.calendar.account = null;
+        state.calendar.links = new Map();
+        await loadEvents();
+        toast(`iCloud disconnected · ${result.removed ?? 0} events removed from Aria`);
+        render();
+      } catch (error) {
+        fail(error);
+      }
+      return;
     case "remove-device":
       if (!confirm(`Sign out ${el.dataset.name}? It will be signed out the next time it checks in (within a minute while it's open).`)) return;
       try {

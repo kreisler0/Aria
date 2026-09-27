@@ -204,6 +204,43 @@ paste it into Supabase ▸ SQL Editor and run it. Without it, the apps keep the 
 device and hide the device list. The Windows (WinUI) app keeps its key per device. In Edge or Chrome you
 can use ⋯ ▸ Apps ▸ *Install this site as an app* to get a taskbar icon and its own window.
 
+### iCloud Calendar (web)
+
+Settings ▸ Calendars ▸ **Connect iCloud** links an account to its iCloud calendars, and the
+link works on every device. You need your Apple ID email and an
+**app-specific password**, which you create at account.apple.com ▸ Sign-In and Security ▸
+App-Specific Passwords.
+
+Browsers can't talk to iCloud, so the Edge Function `supabase/functions/icloud-sync` does it
+(CalDAV). How it works:
+
+- **When it syncs:** every time Aria opens or comes back to the foreground, a few seconds
+  after you change an event, and every 10 minutes in the background (pg_cron + pg_net).
+- **What syncs:** edits, new events and deletions go both ways. When both sides changed,
+  the later edit wins.
+- **Repeating events** and read-only calendars (holidays, subscriptions) show in Aria but
+  are changed in the Calendar app. The assistant can't change them either.
+- **Connecting** also adds your existing Aria events to the default iCloud calendar.
+- **Disconnecting** removes iCloud's copies from Aria and keeps the events you made in Aria.
+- **The password** is encrypted (AES-GCM) with a key that lives only in the function's
+  secrets (`ARIA_ENCRYPTION_KEY`). Apps can't read it back. Revoke it at account.apple.com
+  to cut Aria off at once.
+
+**Deployment is automatic** (`.github/workflows/supabase-deploy.yml`): every push to the
+default branch that changes `supabase/` applies the migrations to the project in
+`web/config.js`, creates the encryption key if it's missing, and deploys the function.
+Set it up once under GitHub ▸ Settings ▸ Secrets and variables ▸ Actions:
+
+- `SUPABASE_ACCESS_TOKEN`: create one at supabase.com/dashboard/account/tokens.
+- `SUPABASE_DB_PASSWORD`: your project's database password. Find it under Project
+  Settings ▸ Database, and reset it there if you don't have it.
+
+Then run the workflow once: Actions ▸ Supabase deploy ▸ Run workflow.
+
+Tests: `node --experimental-strip-types --test supabase/functions/icloud-sync/tests/*.test.ts`
+covers parsing (time zones, repeats, editing iCloud events without losing anything) and runs
+the whole function against a real Supabase and a fake iCloud.
+
 ## 4. Tests and CI
 
 | What | Where | Command |
@@ -212,7 +249,8 @@ can use ⋯ ▸ Apps ▸ *Install this site as an app* to get a taskbar icon and
 | AriaKit (Swift; runs on macOS **and** Linux) | `ios/AriaKit/Tests` | `swift test --package-path ios/AriaKit` |
 | Aria.Core (C#) | `windows/Aria.Core.Tests` | `dotnet test windows/Aria.Core.Tests` |
 | Web app logic (Node 22) | `web/tests` | `cd web && npm test` |
-| Web app in Chromium (Playwright) | `web/e2e/run.mjs` | `SUPABASE_URL=… SUPABASE_ANON_KEY=… node web/e2e/run.mjs` |
+| iCloud sync Edge Function | `supabase/functions/icloud-sync/tests` | `node --experimental-strip-types --test supabase/functions/icloud-sync/tests/*.test.ts` |
+| Web app in Chromium (Playwright) | `web/e2e/run.mjs` | `SUPABASE_URL=… SUPABASE_ANON_KEY=… SUPABASE_SERVICE_ROLE_KEY=… node --experimental-strip-types web/e2e/run.mjs` |
 
 The Swift and C# suites cover date handling, model coding, the Supabase and OpenRouter
 clients (token refresh, retries, error mapping), every tool (including rejection of bad

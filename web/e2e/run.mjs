@@ -14,6 +14,7 @@ process.env.TZ = "America/New_York";
 const { chromium } = await import("playwright").catch(() => createRequire(`${process.execPath}/../../lib/node_modules/`)("playwright"));
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // for the iCloud step (the Edge Function runs in-process)
 const ANON = process.env.SUPABASE_ANON_KEY;
 if (!SUPABASE_URL || !ANON) throw new Error("Set SUPABASE_URL and SUPABASE_ANON_KEY.");
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -403,6 +404,90 @@ try {
     await go("Settings");
     await page.locator(".device").first().waitFor();
     await shot("settings-devices");
+  });
+
+  await step("iCloud Calendar: connect, sync both ways, read-only repeats, switch off, disconnect", async () => {
+    if (!SERVICE_KEY) return console.log("     (skipped: set SUPABASE_SERVICE_ROLE_KEY to run the iCloud step)");
+    // The icloud-sync Edge Function, run here against the real database and a fake iCloud.
+    const fnDir = new URL("../../supabase/functions/icloud-sync/", import.meta.url);
+    const { createHandler } = await import(new URL("lib/handler.ts", fnDir));
+    const { FakeICloud, APPLE_ID, APP_PASSWORD } = await import(new URL("tests/fake-icloud.ts", fnDir));
+    const icloud = new FakeICloud();
+    await icloud.start();
+    const HOME = "/1234/calendars/home/", WORK = "/1234/calendars/work/";
+    icloud.addCalendar(HOME, "Home");
+    icloud.addCalendar(WORK, "Work");
+    const stamp = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const at = (days, hourUTC) => { const d = new Date(Date.now() + days * 86_400_000); d.setUTCHours(hourUTC, 0, 0, 0); return d; };
+    const vcal = (body) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${body}END:VCALENDAR\r\n`;
+    icloud.put(HOME, "offsite.ics", vcal(`BEGIN:VEVENT\r\nUID:offsite\r\nDTSTART:${stamp(at(2, 15))}\r\nDTEND:${stamp(at(2, 17))}\r\nSUMMARY:Team offsite\r\nEND:VEVENT\r\n`));
+    icloud.put(WORK, "gym.ics", vcal(`BEGIN:VEVENT\r\nUID:gym\r\nDTSTART:${stamp(at(2, 12))}\r\nDURATION:PT1H\r\nRRULE:FREQ=DAILY;COUNT=3\r\nSUMMARY:Gym class\r\nEND:VEVENT\r\n`));
+    const handler = createHandler({ supabaseUrl: SUPABASE_URL, serviceKey: SERVICE_KEY, encryptionKey: "e2e-key", caldavRoot: `${icloud.base}/`, publicFunctionUrl: "http://fn/icloud-sync" });
+    await page.route(`${SUPABASE_URL}/functions/v1/icloud-sync`, async (route) => {
+      const req = route.request();
+      if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" } });
+      const response = await handler(new Request("http://fn/icloud-sync", { method: req.method(), headers: req.headers(), body: req.postData() }));
+      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: await response.text() });
+    });
+    try {
+      await go("Settings");
+      await page.getByRole("button", { name: "Connect iCloud" }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Apple ID email").fill(APPLE_ID);
+      await dialog.getByLabel("App-specific password").fill("wrong-password-123");
+      await dialog.getByRole("button", { name: "Connect" }).click();
+      await dialog.getByText("iCloud didn't accept").waitFor();
+      await dialog.getByLabel("App-specific password").fill(APP_PASSWORD);
+      await dialog.getByRole("button", { name: "Connect" }).click();
+      await page.locator("#toast").getByText(/iCloud connected · 4 events imported/).waitFor();
+      await page.locator(".cal-item").filter({ hasText: "Work" }).waitFor();
+      await page.getByText(`iCloud · ${APPLE_ID}`).waitFor();
+      await shot("settings-icloud");
+
+      // iCloud's events are in the calendar, marked with their calendar.
+      await go("Calendar");
+      const day = at(2, 15);
+      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      await page.locator(`[data-day="${key}"]`).first().click();
+      await page.locator(".agenda").getByText("Team offsite").waitFor();
+      await page.locator(".agenda .row").filter({ hasText: "Team offsite" }).locator(".pill.icloud", { hasText: "Home" }).waitFor();
+      // A repeating event opens read-only.
+      await page.locator(".agenda").getByText("Gym class").click();
+      await page.getByRole("dialog").getByRole("heading", { name: "iCloud Event" }).waitFor();
+      assert.equal(await page.getByRole("dialog").getByRole("button", { name: "Save" }).count(), 0);
+      await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+      await page.getByRole("dialog").waitFor({ state: "detached" });
+
+      // An event made in Aria reaches iCloud's default calendar.
+      await page.getByRole("button", { name: "Add event on this day" }).click();
+      await page.getByRole("dialog").getByLabel("Title").fill("Lunch with Sam");
+      await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+      await page.getByRole("dialog").waitFor({ state: "detached" });
+      const home = () => [...icloud.calendars.get(HOME).items.values()].map((i) => i.ics).join("\n");
+      for (let i = 0; i < 40 && !home().includes("SUMMARY:Lunch with Sam"); i++) await page.waitForTimeout(250);
+      assert.match(home(), /SUMMARY:Lunch with Sam/, "pushed to iCloud");
+      await shot("calendar-icloud");
+
+      // Switching Work off removes its events from Aria.
+      await go("Settings");
+      await page.getByLabel("Show Work").uncheck();
+      await go("Calendar");
+      await page.locator(`[data-day="${key}"]`).first().click();
+      await page.locator(".agenda").getByText("Gym class").waitFor({ state: "detached" });
+
+      // Disconnecting removes iCloud's copies; Aria's own event stays.
+      await go("Settings");
+      page.once("dialog", (d) => d.accept());
+      await page.getByRole("button", { name: "Disconnect" }).click();
+      await page.getByRole("button", { name: "Connect iCloud" }).waitFor();
+      await go("Calendar");
+      await page.locator(`[data-day="${key}"]`).first().click();
+      await page.locator(".agenda").getByText("Lunch with Sam").waitFor();
+      assert.equal(await page.locator(".agenda").getByText("Team offsite").count(), 0);
+    } finally {
+      await page.unroute(`${SUPABASE_URL}/functions/v1/icloud-sync`);
+      icloud.stop();
+    }
   });
 
   await step("sign out", async () => {

@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "TZ=America/New_York node --test tests/*.test.mjs",
-    "e2e": "node e2e/run.mjs"
+    "e2e": "node --experimental-strip-types e2e/run.mjs"
   }
 }
