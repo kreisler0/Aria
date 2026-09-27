@@ -449,6 +449,7 @@ function decorate(view) {
     view.querySelectorAll(".stat, .card").forEach((card, i) => card.style.setProperty("--i", i));
   }
   updateLiquids();
+  wakeLight();
 }
 
 /** One glass pill per group (sidebar, tab bar, segmented controls) that slides — stretching
@@ -488,14 +489,57 @@ addEventListener("resize", () => updateLiquids(false));
 // Segmented buttons outside the re-rendered view (sheets, sign-in) change on click.
 document.addEventListener("click", () => requestAnimationFrame(() => updateLiquids()));
 
-const LIT = ".card, .btn, .row, .ai-bar form, .sidebar, .tabbar-inner, .suggestions button, .sheet, .glass";
-document.addEventListener("pointermove", (e) => {
-  const el = e.target.closest?.(LIT);
-  if (!el) return;
-  const box = el.getBoundingClientRect();
-  el.style.setProperty("--mx", `${e.clientX - box.left}px`);
-  el.style.setProperty("--my", `${e.clientY - box.top}px`);
-}, { passive: true });
+/** One light for the whole window. It glides after the pointer, and every glass surface is
+ *  lit from that same point, so the glow sweeps across neighbouring panels together and
+ *  fades everywhere when the pointer leaves the window, instead of each panel keeping its
+ *  own frozen highlight. */
+const LIT = ".card, .btn, .row, .ai-bar form, .sidebar, .tabbar-inner, .suggestions button, .sheet, .glass, .seg";
+const light = { x: -999, y: -999, tx: -999, ty: -999, level: 0, target: 0, frame: 0 };
+function moveLight(e) {
+  if (e.pointerType === "touch") return;
+  if (light.target === 0 && light.level < 0.05) {
+    // Appear where the pointer is rather than sliding in from the old spot.
+    light.x = e.clientX;
+    light.y = e.clientY;
+  }
+  light.tx = e.clientX;
+  light.ty = e.clientY;
+  light.target = 1;
+  wakeLight();
+}
+function wakeLight() {
+  light.frame ||= requestAnimationFrame(stepLight);
+}
+function stepLight() {
+  light.frame = 0;
+  const glide = reduceMotion() ? 1 : 0.2;
+  light.x += (light.tx - light.x) * glide;
+  light.y += (light.ty - light.y) * glide;
+  light.level += (light.target - light.level) * (reduceMotion() ? 1 : 0.12);
+  document.documentElement.style.setProperty("--light", light.level.toFixed(3));
+  for (const el of document.querySelectorAll(LIT)) {
+    const box = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${(light.x - box.left).toFixed(1)}px`);
+    el.style.setProperty("--my", `${(light.y - box.top).toFixed(1)}px`);
+  }
+  const settled = Math.abs(light.tx - light.x) < 0.5 && Math.abs(light.ty - light.y) < 0.5 && Math.abs(light.target - light.level) < 0.01;
+  if (!settled) wakeLight();
+}
+document.addEventListener("pointermove", moveLight, { passive: true });
+document.addEventListener("pointerdown", moveLight, { passive: true });
+// The pointer left the window: dim the light everywhere.
+document.addEventListener("pointerout", (e) => {
+  if (!e.relatedTarget) {
+    light.target = 0;
+    wakeLight();
+  }
+});
+addEventListener("blur", () => {
+  light.target = 0;
+  wakeLight();
+});
+// Panels move (scrolling, re-renders): keep them lit from the same point.
+addEventListener("scroll", wakeLight, { passive: true });
 
 // Chromium can refract the backdrop through an SVG filter; others keep plain frosted glass.
 if (navigator.userAgentData?.brands?.some((b) => /Chromium/i.test(b.brand))) document.documentElement.classList.add("lg-refract");
