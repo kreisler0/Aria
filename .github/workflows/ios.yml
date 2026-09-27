@@ -56,50 +56,6 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$APP/PlugIns/AriaWidgets.appex/Info.plist"
           /usr/libexec/PlistBuddy -c "Print :NSSupportsLiveActivities" "$APP/Info.plist"
 
-      # Launches the real app: first run (backend setup), then every screen with sample data
-      # (-AriaUITestPreview), on an iPhone and an iPad. See ios/AriaUITests.
-      - name: UI tests on iPhone and iPad simulators
-        timeout-minutes: 30
-        run: |
-          set -o pipefail
-          read -r PHONE PAD < <(xcrun simctl list devices available -j | python3 -c '
-          import json, re, sys
-          devices = json.load(sys.stdin)["devices"]
-          def version(runtime):
-              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
-              return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
-          for runtime in sorted((r for r in devices if ".iOS-" in r), key=version, reverse=True):
-              phones = [d["udid"] for d in devices[runtime] if d["name"].startswith("iPhone")]
-              pads = [d["udid"] for d in devices[runtime] if d["name"].startswith("iPad")]
-              if phones and pads:
-                  print(phones[0], pads[0])
-                  break
-          ')
-          echo "iPhone: $PHONE  iPad: $PAD"
-          test -n "$PHONE" && test -n "$PAD"
-          if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
-                 -destination "id=$PHONE" -destination "id=$PAD" \
-                 -derivedDataPath build/DerivedData -resultBundlePath build/UITests.xcresult \
-                 -test-timeouts-enabled YES -default-test-execution-time-allowance 480 \
-                 CODE_SIGNING_ALLOWED=NO test > xcodebuild-test.log 2>&1; then
-            echo "::group::Failures"
-            grep -E "error:|failed|Failing|XCTAssert|Test Case" xcodebuild-test.log | sort -u | head -150
-            echo "::endgroup::"
-            tail -80 xcodebuild-test.log
-            exit 1
-          fi
-          grep -E "Test Case .*(passed|failed)|Executed|TEST SUCCEEDED" xcodebuild-test.log | tail -20
-
-      - name: Upload UI test results
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-test-results
-          path: |
-            build/UITests.xcresult
-            xcodebuild-test.log
-          if-no-files-found: ignore
-
       - name: Project is in sync with project.yml
         continue-on-error: true
         run: |
@@ -112,4 +68,86 @@ jobs:
         with:
           name: xcodebuild-log
           path: xcodebuild.log
+          if-no-files-found: ignore
+
+  # Launches the real app: first run (backend setup), then every screen with sample data
+  # (-AriaUITestPreview). iPhone and iPad run in parallel; boot, build and test are
+  # separate steps so their timings show where time goes. See ios/AriaUITests.
+  ui-tests:
+    name: UI tests (${{ matrix.family }})
+    runs-on: macos-15
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPhone, iPad]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select the newest stable Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc|release_candidate' | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Start the ${{ matrix.family }} simulator
+        timeout-minutes: 5
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          family = sys.argv[1]
+          devices = json.load(sys.stdin)["devices"]
+          def version(runtime):
+              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+          for runtime in sorted((r for r in devices if ".iOS-" in r), key=version, reverse=True):
+              matches = [d for d in devices[runtime] if d["name"].startswith(family)]
+              if matches:
+                  print(matches[0]["udid"])
+                  break
+          ' "${{ matrix.family }}")
+          test -n "$UDID"
+          xcrun simctl list devices | grep "$UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+
+      - name: Build for testing
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+                 -destination "id=$UDID" -derivedDataPath build/DerivedData \
+                 CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+                 build-for-testing > build.log 2>&1; then
+            grep -E "error:" build.log | sort -u | head -100
+            tail -60 build.log
+            exit 1
+          fi
+          tail -3 build.log
+
+      - name: Wait for the simulator
+        timeout-minutes: 5
+        run: xcrun simctl bootstatus "$UDID" -b
+
+      - name: Run the UI tests
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/DerivedData \
+            -resultBundlePath build/UITests.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 240 \
+            test-without-building 2>&1 | tee test.log \
+            | (grep --line-buffered -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)|Testing failed" || true)
+
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-${{ matrix.family }}
+          path: |
+            build/UITests.xcresult
+            build.log
+            test.log
           if-no-files-found: ignore

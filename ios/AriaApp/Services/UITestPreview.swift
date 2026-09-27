@@ -6,6 +6,9 @@ import AriaKit
 /// without a Supabase project or an OpenRouter key. Changes stay in memory.
 enum UITestPreview {
     static let isEnabled = ProcessInfo.processInfo.arguments.contains("-AriaUITestPreview")
+    /// Any UI-test launch (`-AriaUITest`): UIKit animations are switched off so the tests
+    /// don't wait for transitions.
+    static let isUITest = isEnabled || ProcessInfo.processInfo.arguments.contains("-AriaUITest")
 
     struct Sample {
         let user: AuthUser
