@@ -300,6 +300,17 @@ public sealed partial class AppViewModel : ObservableObject
     }
 
     /// <summary>Makes sure events for a month shown in the calendar are loaded.</summary>
+    /// <summary>
+    /// Shows the given tasks and events without a backend. <c>Aria.exe --self-test</c> uses it
+    /// to open every page with data on a machine that has no Supabase project.
+    /// </summary>
+    public void ShowPreview(IEnumerable<TaskItem> tasks, IEnumerable<EventItem> events)
+    {
+        _tasks = [.. tasks];
+        _events = [.. events];
+        Rebuild();
+    }
+
     public async Task EnsureEventsLoadedAsync(DateOnly first, DateOnly last)
     {
         if (_client is null || Phase != AppPhase.SignedIn) return;

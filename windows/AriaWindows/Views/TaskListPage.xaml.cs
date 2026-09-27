@@ -27,11 +27,15 @@ public sealed partial class TaskListPage : Page
 
     private async void Edit_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ItemRowViewModel row) await ItemDialogs.EditAsync(row, XamlRoot);
+        if (RowOf(sender) is { } row) await ItemDialogs.EditAsync(row, XamlRoot);
     }
 
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ItemRowViewModel { Task: { } task }) await ViewModel.DeleteTaskAsync(task);
+        if (RowOf(sender) is { Task: { } task }) await ViewModel.DeleteTaskAsync(task);
     }
+
+    /// <summary>The row a context-menu item belongs to (bound to its Tag, since flyouts don't reliably inherit DataContext).</summary>
+    private static ItemRowViewModel? RowOf(object sender) =>
+        sender is FrameworkElement element ? (element.Tag ?? element.DataContext) as ItemRowViewModel : null;
 }

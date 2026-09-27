@@ -14,16 +14,30 @@ public sealed class WindowsPlatform : IAppPlatform
 {
     public static readonly string DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Aria");
 
-    public WindowsPlatform(DispatcherQueue dispatcherQueue)
+    /// <param name="isolated">
+    /// Keep everything in memory and ignore appsettings.json, so the self-test never touches the
+    /// user's key, session or settings.
+    /// </param>
+    public WindowsPlatform(DispatcherQueue dispatcherQueue, bool isolated = false)
     {
-        Directory.CreateDirectory(DataFolder);
         Dispatcher = new DispatcherQueueDispatcher(dispatcherQueue);
+        if (isolated)
+        {
+            Credentials = new InMemoryCredentialStore();
+            Sessions = new InMemorySessionStore();
+            Settings = new InMemorySettingsStore();
+            return;
+        }
+        Directory.CreateDirectory(DataFolder);
+        Credentials = new CredentialStore();
+        Sessions = new ProtectedSessionStore(Path.Combine(DataFolder, "session.bin"));
+        Settings = new JsonSettingsStore(Path.Combine(DataFolder, "settings.json"));
         BundledBackend = LoadBundledBackend();
     }
 
-    public ICredentialStore Credentials { get; } = new CredentialStore();
-    public ISessionStore Sessions { get; } = new ProtectedSessionStore(Path.Combine(DataFolder, "session.bin"));
-    public IAppSettingsStore Settings { get; } = new JsonSettingsStore(Path.Combine(DataFolder, "settings.json"));
+    public ICredentialStore Credentials { get; }
+    public ISessionStore Sessions { get; }
+    public IAppSettingsStore Settings { get; }
     public IUiDispatcher Dispatcher { get; }
     public TimeZoneInfo TimeZone => TimeZoneInfo.Local;
     public SupabaseConfig? BundledBackend { get; }

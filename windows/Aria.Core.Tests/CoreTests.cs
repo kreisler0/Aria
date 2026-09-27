@@ -412,3 +412,63 @@ public class RealtimeProtocolTests
         Assert.IsType<RealtimeMessage.Other>(RealtimeProtocol.Parse("garbage"));
     }
 }
+
+public class AppViewModelPreviewTests
+{
+    private sealed class OfflinePlatform : IAppPlatform
+    {
+        public ICredentialStore Credentials { get; } = new InMemoryCredentialStore();
+        public ISessionStore Sessions { get; } = new InMemorySessionStore();
+        public IAppSettingsStore Settings { get; } = new InMemorySettingsStore();
+        public IUiDispatcher Dispatcher { get; } = new ImmediateDispatcher();
+        public TimeZoneInfo TimeZone => T.NewYork;
+        public SupabaseConfig? BundledBackend => null;
+        public HttpClient CreateHttpClient() => new();
+    }
+
+    [Fact]
+    public async Task ShowPreviewFillsEveryScreenWithoutABackend()
+    {
+        var now = T.D("2026-09-27T13:41:00Z"); // 09:41 in New York
+        var vm = new AppViewModel(new OfflinePlatform(), () => now);
+        await vm.StartAsync();
+        Assert.Equal(AppPhase.NeedsBackend, vm.Phase);
+        Assert.True(vm.HasNoTasks);
+
+        vm.ShowPreview(
+            [
+                new TaskItem { Title = "Pay rent", DueAt = T.D("2026-09-26T21:00:00Z"), Priority = TaskPriority.High },
+                new TaskItem { Title = "Finish essay", DueAt = T.D("2026-09-27T21:00:00Z"), Priority = TaskPriority.Medium, Source = ItemSource.Ai },
+                new TaskItem { Title = "Call mum", DueAt = T.D("2026-09-28T16:00:00Z") },
+                new TaskItem { Title = "Read a book", Priority = TaskPriority.Medium },
+                new TaskItem { Title = "Water plants", DueAt = T.D("2026-09-27T14:00:00Z"), Completed = true },
+            ],
+            [
+                new EventItem { Title = "Standup", StartAt = T.D("2026-09-27T14:00:00Z"), EndAt = T.D("2026-09-27T14:15:00Z") },
+                new EventItem { Title = "Study session", StartAt = T.D("2026-09-27T22:00:00Z"), EndAt = T.D("2026-09-28T00:00:00Z") },
+                new EventItem { Title = "Mum's birthday", StartAt = T.D("2026-09-28T00:00:00Z"), EndAt = T.D("2026-09-29T00:00:00Z"), AllDay = true },
+            ]);
+
+        Assert.Equal(["Pay rent", "Standup", "Finish essay", "Study session", "Read a book"], vm.Upcoming.Select(r => r.Title));
+        Assert.True(vm.HasUpcoming);
+        Assert.True(vm.Upcoming[0].IsOverdue);
+        Assert.True(vm.Upcoming[2].IsFromAi);
+        Assert.Equal(["Overdue", "Today", "Tomorrow", "No date"], vm.TaskGroups.Select(g => g.Title));
+        Assert.False(vm.HasNoTasks);
+        Assert.Equal(["Standup", "Study session", "Water plants", "Finish essay"], vm.DayItems.Select(r => r.Title));
+        Assert.False(vm.DayIsEmpty);
+        Assert.Equal((true, true), vm.MarksOn(new DateOnly(2026, 9, 27)));
+        Assert.Equal((true, true), vm.MarksOn(new DateOnly(2026, 9, 28)));
+        Assert.Equal((false, false), vm.MarksOn(new DateOnly(2026, 9, 29)));
+        Assert.Equal(7, vm.WeekAgenda.Count);
+
+        vm.ShowCompleted = true;
+        Assert.Equal("Completed", vm.TaskGroups[^1].Title);
+        Assert.Equal(["Water plants"], vm.TaskGroups[^1].Items.Select(r => r.Title));
+
+        // Without a backend nothing is written: ticking a row leaves the data alone.
+        vm.Upcoming[0].IsCompleted = true;
+        await vm.ToggleTaskAsync(vm.Tasks[0], true);
+        Assert.False(vm.Tasks[0].Completed);
+    }
+}

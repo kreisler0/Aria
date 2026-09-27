@@ -59,12 +59,12 @@
                             <Grid Background="Transparent">
                                 <Grid.ContextFlyout>
                                     <MenuFlyout>
-                                        <MenuFlyoutItem Click="Edit_Click" Text="Edit">
+                                        <MenuFlyoutItem Click="Edit_Click" Tag="{x:Bind}" Text="Edit">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE70F;" />
                                             </MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
-                                        <MenuFlyoutItem Click="Delete_Click" Text="Delete">
+                                        <MenuFlyoutItem Click="Delete_Click" Tag="{x:Bind}" Text="Delete">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE74D;" />
                                             </MenuFlyoutItem.Icon>

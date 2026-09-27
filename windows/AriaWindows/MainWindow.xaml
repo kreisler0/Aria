@@ -69,6 +69,7 @@
         </NavigationView>
 
         <views:LoginPage
+            x:Name="Login"
             Grid.Row="1"
             Visibility="{x:Bind helpers:Ui.Visible(ViewModel.ShowLogin), Mode=OneWay}" />
 

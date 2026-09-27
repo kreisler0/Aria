@@ -191,8 +191,12 @@ GitHub Actions (`.github/workflows/`):
 - **iOS** (macOS): builds the app and widget extension for the simulator, runs AriaKit's
   tests, and checks that the extension is embedded and that the Xcode project matches
   `project.yml`.
-- **Windows**: runs the Aria.Core tests, builds the WinUI 3 app and launches it as a
-  smoke test.
+- **Windows**: runs the Aria.Core tests, builds the WinUI 3 app, launches it, then runs
+  `Aria.exe --self-test`. The self-test checks the Credential Locker and the DPAPI session
+  file. It then opens every page with sample data, ticks a task through the animated check,
+  opens the editors (including from the context menu), and switches the calendar view and
+  the theme, all on a real Windows desktop. It runs isolated, so it never touches your key,
+  session or settings. The report is written to `%TEMP%\aria-self-test.log`.
 - **Backend**: starts a local Supabase (with Realtime), runs the pgTAP tests, then runs
   the Swift (Linux) and .NET suites against it, including the Realtime end-to-end test.
 

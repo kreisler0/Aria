@@ -7,9 +7,8 @@ namespace AriaWindows.Services;
 /// Keeps the user's OpenRouter API key in the Windows Credential Locker (PasswordVault) —
 /// never in Supabase or on disk in plain text (spec §8).
 /// </summary>
-public sealed class CredentialStore : ICredentialStore
+public sealed class CredentialStore(string resource = "Aria.OpenRouter") : ICredentialStore
 {
-    private const string Resource = "Aria.OpenRouter";
     private const string UserName = "api-key";
     private readonly PasswordVault _vault = new();
 
@@ -17,7 +16,7 @@ public sealed class CredentialStore : ICredentialStore
     {
         try
         {
-            var credential = _vault.Retrieve(Resource, UserName);
+            var credential = _vault.Retrieve(resource, UserName);
             credential.RetrievePassword();
             return string.IsNullOrWhiteSpace(credential.Password) ? null : credential.Password;
         }
@@ -32,14 +31,14 @@ public sealed class CredentialStore : ICredentialStore
     {
         Remove();
         var trimmed = key?.Trim();
-        if (!string.IsNullOrEmpty(trimmed)) _vault.Add(new PasswordCredential(Resource, UserName, trimmed));
+        if (!string.IsNullOrEmpty(trimmed)) _vault.Add(new PasswordCredential(resource, UserName, trimmed));
     }
 
     private void Remove()
     {
         try
         {
-            foreach (var credential in _vault.FindAllByResource(Resource)) _vault.Remove(credential);
+            foreach (var credential in _vault.FindAllByResource(resource)) _vault.Remove(credential);
         }
         catch (Exception)
         {

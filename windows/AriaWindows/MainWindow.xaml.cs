@@ -30,7 +30,8 @@ public sealed partial class MainWindow : Window
         ViewModel.AssistantRequested += () => Select("assistant");
         ViewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(AppViewModel.Phase) && ViewModel.IsSignedIn && ContentFrame.Content is null) Select("today");
+            if (e.PropertyName == nameof(AppViewModel.Phase) && ViewModel.IsSignedIn && ContentFrame.Content is null)
+                Show((Nav.SelectedItem as NavigationViewItem)?.Tag as string);
         };
         Nav.SelectedItem = Nav.MenuItems[0];
     }
@@ -47,29 +48,34 @@ public sealed partial class MainWindow : Window
         _platform.Settings.Theme = theme;
     }
 
+    /// <summary>The page on screen, the sign-in view and the themed root (used by the self-test).</summary>
+    internal Page? CurrentPage => ContentFrame.Content as Page;
+    internal FrameworkElement LoginView => Login;
+    internal FrameworkElement Root => RootGrid;
+
+    /// <summary>Highlights a pane item ("today", "calendar", "tasks", "assistant", "settings") and shows its page.</summary>
     public void Select(string tag)
     {
-        foreach (var item in Nav.MenuItems.OfType<NavigationViewItem>())
-        {
-            if ((string)item.Tag == tag)
-            {
-                Nav.SelectedItem = item;
-                return;
-            }
-        }
+        Nav.SelectedItem = tag == "settings"
+            ? Nav.SettingsItem
+            : Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item => (string)item.Tag == tag);
+        Show(tag);
     }
 
-    private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    private void Nav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args) =>
+        Show(args.IsSettingsSelected ? "settings" : (args.SelectedItem as NavigationViewItem)?.Tag as string);
+
+    /// <summary>Navigates straight to the page, so it never depends on when the pane raises SelectionChanged.</summary>
+    private void Show(string? tag)
     {
-        var page = args.IsSettingsSelected
-            ? typeof(SettingsPage)
-            : (args.SelectedItem as NavigationViewItem)?.Tag switch
-            {
-                "calendar" => typeof(CalendarPage),
-                "tasks" => typeof(TaskListPage),
-                "assistant" => typeof(AIChatPage),
-                _ => typeof(TodayPage),
-            };
+        var page = tag switch
+        {
+            "settings" => typeof(SettingsPage),
+            "calendar" => typeof(CalendarPage),
+            "tasks" => typeof(TaskListPage),
+            "assistant" => typeof(AIChatPage),
+            _ => typeof(TodayPage),
+        };
         if (ContentFrame.CurrentSourcePageType != page)
             ContentFrame.Navigate(page, null, new EntranceNavigationTransitionInfo());
     }
