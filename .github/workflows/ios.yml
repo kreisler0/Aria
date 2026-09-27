@@ -59,6 +59,7 @@ jobs:
       # Launches the real app: first run (backend setup), then every screen with sample data
       # (-AriaUITestPreview), on an iPhone and an iPad. See ios/AriaUITests.
       - name: UI tests on iPhone and iPad simulators
+        timeout-minutes: 30
         run: |
           set -o pipefail
           read -r PHONE PAD < <(xcrun simctl list devices available -j | python3 -c '
@@ -79,6 +80,7 @@ jobs:
           if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
                  -destination "id=$PHONE" -destination "id=$PAD" \
                  -derivedDataPath build/DerivedData -resultBundlePath build/UITests.xcresult \
+                 -test-timeouts-enabled YES -default-test-execution-time-allowance 480 \
                  CODE_SIGNING_ALLOWED=NO test > xcodebuild-test.log 2>&1; then
             echo "::group::Failures"
             grep -E "error:|failed|Failing|XCTAssert|Test Case" xcodebuild-test.log | sort -u | head -150

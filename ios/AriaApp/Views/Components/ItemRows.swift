@@ -96,6 +96,7 @@ struct PlannerItemRow: View {
 /// expands into the full assistant sheet.
 struct AIInputBar: View {
     let action: () -> Void
+    @State private var greet = false
 
     var body: some View {
         Button(action: action) {
@@ -103,7 +104,9 @@ struct AIInputBar: View {
                 Image(systemName: "sparkles")
                     .font(.title3)
                     .foregroundStyle(.tint)
-                    .symbolEffect(.pulse, options: .repeating.speed(0.3))
+                    // A few gentle pulses when Today appears, then still: a never-ending
+                    // animation costs battery and keeps the UI from ever settling.
+                    .symbolEffect(.pulse, options: .repeat(3).speed(0.5), value: greet)
                 Text("Ask Aria to plan something…")
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -119,5 +122,6 @@ struct AIInputBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Ask Aria")
+        .onAppear { greet.toggle() }
     }
 }
