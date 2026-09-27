@@ -12,7 +12,7 @@ public partial class App : Application
     /// <summary>The app-wide view model (shared by every page).</summary>
     public static AppViewModel ViewModel { get; private set; } = null!;
 
-    public static MainWindow? MainWindow => (Current as App)?._window;
+    public static MainWindow? CurrentWindow => (Current as App)?._window;
 
     public App()
     {

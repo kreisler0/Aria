@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build WinUI 3 app, test Aria.Core
+  test:
+    name: Test Aria.Core on Windows
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -26,6 +26,17 @@ jobs:
 
       - name: Test Aria.Core
         run: dotnet test windows/Aria.Core.Tests/Aria.Core.Tests.csproj -c Release
+
+  build:
+    name: Build the WinUI 3 app
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
 
       - name: Build Aria for Windows (x64)
         run: dotnet build windows/AriaWindows/AriaWindows.csproj -c Release -p:Platform=x64

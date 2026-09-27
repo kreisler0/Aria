@@ -6,46 +6,64 @@ import AriaKit
 
 /// Lock Screen + Dynamic Island presentation of the current/next item (spec §4.2):
 /// a countdown or progress bar for events, and a "Mark done" button (LiveActivityIntent).
+/// The activity goes stale at midnight; from then until the app ends it (next launch or
+/// background refresh) it shows a "day is over" state instead of yesterday's item.
 struct AriaLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: AriaActivityAttributes.self) { context in
-            LockScreenLiveActivityView(state: context.state)
-                .padding(16)
-                .activityBackgroundTint(Color.black.opacity(0.35))
-                .activitySystemActionForegroundColor(.white)
-                .widgetURL(AriaLink.today)
+            Group {
+                if context.isStale {
+                    DayOverView()
+                } else {
+                    LockScreenLiveActivityView(state: context.state)
+                }
+            }
+            .padding(16)
+            .activityBackgroundTint(Color.black.opacity(0.35))
+            .activitySystemActionForegroundColor(.white)
+            .widgetURL(AriaLink.today)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    KindIcon(state: context.state)
+                    KindIcon(state: context.state, isStale: context.isStale)
                         .font(.title2)
                         .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    TimingText(state: context.state)
-                        .font(.callout.monospacedDigit())
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 90, alignment: .trailing)
+                    if !context.isStale {
+                        TimingText(state: context.state)
+                            .font(.callout.monospacedDigit())
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 90, alignment: .trailing)
+                    }
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.title)
+                    Text(context.isStale ? DayOverView.title : context.state.title)
                         .font(.headline)
                         .lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 8) {
-                        EventProgress(state: context.state)
-                        MarkDoneButton(state: context.state)
+                    if context.isStale {
+                        Text(DayOverView.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        VStack(spacing: 8) {
+                            EventProgress(state: context.state)
+                            MarkDoneButton(state: context.state)
+                        }
                     }
                 }
             } compactLeading: {
-                KindIcon(state: context.state)
+                KindIcon(state: context.state, isStale: context.isStale)
             } compactTrailing: {
-                TimingText(state: context.state)
-                    .font(.caption2.monospacedDigit())
-                    .frame(maxWidth: 52)
+                if !context.isStale {
+                    TimingText(state: context.state)
+                        .font(.caption2.monospacedDigit())
+                        .frame(maxWidth: 52)
+                }
             } minimal: {
-                KindIcon(state: context.state)
+                KindIcon(state: context.state, isStale: context.isStale)
             }
             .widgetURL(AriaLink.today)
             .keylineTint(Color.accentColor)
@@ -80,12 +98,40 @@ private struct LockScreenLiveActivityView: View {
     }
 }
 
-private struct KindIcon: View {
-    let state: AriaActivityAttributes.ContentState
+/// Shown after midnight, once yesterday's item no longer applies.
+private struct DayOverView: View {
+    static let title = "That's a wrap for today"
+    static let subtitle = "Open Aria to see today's plan."
 
     var body: some View {
-        Image(systemName: state.kind == .event ? "calendar" : (state.priority >= 3 ? "flag.fill" : "checklist"))
-            .foregroundStyle(state.isOverdue ? Color.red : Color.accentColor)
+        HStack(spacing: 12) {
+            Image(systemName: "moon.stars.fill")
+                .font(.title2)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Self.title)
+                    .font(.headline)
+                Text(Self.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
+}
+
+private struct KindIcon: View {
+    let state: AriaActivityAttributes.ContentState
+    var isStale = false
+
+    var body: some View {
+        if isStale {
+            Image(systemName: "moon.stars.fill")
+                .foregroundStyle(Color.accentColor)
+        } else {
+            Image(systemName: state.kind == .event ? "calendar" : (state.priority >= 3 ? "flag.fill" : "checklist"))
+                .foregroundStyle(state.isOverdue ? Color.red : Color.accentColor)
+        }
     }
 }
 

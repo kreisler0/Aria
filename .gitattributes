@@ -1,0 +1,9 @@
+* text=auto
+
+# Golden files are compared byte-for-byte by the Swift and C# tests.
+shared/ai/** text eol=lf
+
+*.sh text eol=lf
+*.sln text eol=crlf
+*.png binary
+*.ico binary

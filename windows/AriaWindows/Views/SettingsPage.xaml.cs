@@ -21,6 +21,6 @@ public sealed partial class SettingsPage : Page
     {
         if (ThemePicker.SelectedIndex < 0) return;
         var theme = Themes[ThemePicker.SelectedIndex];
-        App.MainWindow?.ApplyTheme(theme == "System" ? null : theme);
+        App.CurrentWindow?.ApplyTheme(theme == "System" ? null : theme);
     }
 }

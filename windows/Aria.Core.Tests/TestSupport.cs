@@ -35,7 +35,8 @@ internal static class T
 
     public const string FakeJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig";
 
-    public static string SharedFile(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "shared", name));
+    public static string SharedFile(string name) =>
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "shared", name)).Replace("\r\n", "\n");
 }
 
 /// <summary>Scriptable HTTP handler that records requests.</summary>
