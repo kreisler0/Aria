@@ -12,6 +12,7 @@ struct TaskRow: View {
             CompletionCheckbox(isOn: task.completed) {
                 Task { await model.toggle(task) }
             }
+            .accessibilityIdentifier("complete \(task.title)")
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {

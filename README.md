@@ -190,7 +190,12 @@ end.
 GitHub Actions (`.github/workflows/`):
 - **iOS** (macOS): builds the app and widget extension for the simulator, runs AriaKit's
   tests, and checks that the extension is embedded and that the Xcode project matches
-  `project.yml`.
+  `project.yml`. It also runs the UI tests (`ios/AriaUITests`) on an iPhone and an iPad
+  simulator. They launch the real app, check that a first run asks for a backend, then use
+  `-AriaUITestPreview` to sign in to a day of sample data with no backend. From there they
+  tick a task, add one through the Quick Add widget's `aria://` link, and open the calendar
+  (week view and event editor), the task list (show completed, editor), the assistant and
+  Settings, then sign out.
 - **Windows**: runs the Aria.Core tests, builds the WinUI 3 app, launches it, then runs
   `Aria.exe --self-test`. The self-test checks the Credential Locker and the DPAPI session
   file. It then opens every page with sample data, ticks a task through the animated check,
@@ -222,6 +227,11 @@ The Xcode project is generated from `ios/project.yml` with
   `calendarItemExternalIdentifier`. A unique `(user_id, ios_calendar_event_id)` constraint
   stops two devices importing the same event twice.
 - **`planner_days` has an `updated_at` column.**
+- **No Outlook calendar sync on Windows.** The spec marks Microsoft Graph / Outlook sync as
+  optional, and it isn't included. The Windows app shows every event in Supabase, which
+  includes the events the iPhone syncs from the iOS Calendar.
+- **Accent colour on Windows** follows the Windows accent colour (Settings ▸ Personalization
+  ▸ Colors), as Windows apps normally do. The iOS app has its own accent picker in Settings.
 - **Sign-in is email/password**, which the spec allows ("email/password or Sign in with
   Apple"). To add Sign in with Apple you need the capability on a paid developer account
   and the Apple provider enabled in Supabase. `SupabaseAuth` is the place to add the

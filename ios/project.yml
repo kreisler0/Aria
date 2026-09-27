@@ -117,6 +117,18 @@ targets:
         ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: ""
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) ARIA_WIDGETS
         SKIP_INSTALL: YES
+  AriaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: AriaUITests
+    dependencies:
+      - target: Aria
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ARIA_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Aria
 schemes:
   Aria:
     build:
@@ -125,5 +137,9 @@ schemes:
         AriaWidgets: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - AriaUITests
     archive:
       config: Release

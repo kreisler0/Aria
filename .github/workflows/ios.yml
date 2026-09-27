@@ -56,6 +56,48 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$APP/PlugIns/AriaWidgets.appex/Info.plist"
           /usr/libexec/PlistBuddy -c "Print :NSSupportsLiveActivities" "$APP/Info.plist"
 
+      # Launches the real app: first run (backend setup), then every screen with sample data
+      # (-AriaUITestPreview), on an iPhone and an iPad. See ios/AriaUITests.
+      - name: UI tests on iPhone and iPad simulators
+        run: |
+          set -o pipefail
+          read -r PHONE PAD < <(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(runtime):
+              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+          for runtime in sorted((r for r in devices if ".iOS-" in r), key=version, reverse=True):
+              phones = [d["udid"] for d in devices[runtime] if d["name"].startswith("iPhone")]
+              pads = [d["udid"] for d in devices[runtime] if d["name"].startswith("iPad")]
+              if phones and pads:
+                  print(phones[0], pads[0])
+                  break
+          ')
+          echo "iPhone: $PHONE  iPad: $PAD"
+          test -n "$PHONE" && test -n "$PAD"
+          if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+                 -destination "id=$PHONE" -destination "id=$PAD" \
+                 -derivedDataPath build/DerivedData -resultBundlePath build/UITests.xcresult \
+                 CODE_SIGNING_ALLOWED=NO test > xcodebuild-test.log 2>&1; then
+            echo "::group::Failures"
+            grep -E "error:|failed|Failing|XCTAssert|Test Case" xcodebuild-test.log | sort -u | head -150
+            echo "::endgroup::"
+            tail -80 xcodebuild-test.log
+            exit 1
+          fi
+          grep -E "Test Case .*(passed|failed)|Executed|TEST SUCCEEDED" xcodebuild-test.log | tail -20
+
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: |
+            build/UITests.xcresult
+            xcodebuild-test.log
+          if-no-files-found: ignore
+
       - name: Project is in sync with project.yml
         continue-on-error: true
         run: |

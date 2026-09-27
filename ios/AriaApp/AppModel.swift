@@ -102,6 +102,10 @@ final class AppModel {
 
     func start() async {
         guard phase == .launching else { return }
+        if UITestPreview.isEnabled {
+            enterUITestPreview()
+            return
+        }
         guard let client = environment.makeClient() else {
             phase = .needsBackend
             return
@@ -114,6 +118,17 @@ final class AppModel {
         } else {
             phase = .signedOut
         }
+    }
+
+    /// `-AriaUITestPreview` (UI tests): a signed-in day of sample data and no backend.
+    private func enterUITestPreview() {
+        let sample = UITestPreview.sample(calendar: calendar)
+        user = sample.user
+        tasks = sample.tasks
+        events = sample.events
+        chat = sample.chat
+        phase = .signedIn
+        publish()
     }
 
     func scenePhaseChanged(_ scenePhase: ScenePhase) {
@@ -286,12 +301,13 @@ final class AppModel {
     // MARK: Tasks
 
     func addTask(title: String, notes: String? = nil, dueAt: Date? = nil, priority: TaskPriority = .none) async {
-        guard let client else { return }
+        guard client != nil || UITestPreview.isEnabled else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let new = NewTask(title: trimmed, notes: notes?.nilIfBlank, dueAt: dueAt, priority: priority)
         withAnimation(AriaTheme.spring) { tasks.append(new.makeItem(userId: user?.id)) }
         publish()
+        guard let client else { return } // UI-test preview: the change stays local
         do {
             upsertLocal(try await client.createTask(new))
         } catch {
@@ -302,11 +318,12 @@ final class AppModel {
     }
 
     func toggle(_ task: TaskItem) async {
-        guard let client else { return }
+        guard client != nil || UITestPreview.isEnabled else { return }
         let completed = !task.completed
         if completed { Haptics.completed() }
         withAnimation(AriaTheme.spring) { upsertLocal(TaskUpdate(completed: completed).applied(to: task)) }
         publish()
+        guard let client else { return } // UI-test preview: the change stays local
         do {
             if let saved = try await client.setTaskCompleted(id: task.id, completed: completed) { upsertLocal(saved) }
         } catch {

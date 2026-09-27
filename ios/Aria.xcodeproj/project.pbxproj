@@ -41,10 +41,19 @@
 		B12477E23B411E2490CCD9BE /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C34445784CBC3E41269C32F8 /* LiveActivityManager.swift */; };
 		BE5B447C0217806F25C10C7A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734DB421DFCA142E99A9ED91 /* Theme.swift */; };
 		C3A6E32676FB356E6C9D1AF9 /* AriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC4DA810D856F6DBFC6DA18 /* AriaApp.swift */; };
+		EEC119294EC4ECEAF4E0B464 /* UITestPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC6363CB5EADC5782D3E24F /* UITestPreview.swift */; };
 		EF170EA3DF82D5EF77FBD33C /* Editors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C5A39788EB8DCCFC1DBBDE /* Editors.swift */; };
+		FAC83E963290306AC8447C6B /* AriaUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA99CE78B84EB25C38E27BEC /* AriaUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		104C7E73F7A8535AD012AEAC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 84880BA6D29A6239877AD004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CAE722123C010788DE868C61;
+			remoteInfo = Aria;
+		};
 		C09BA722A8C5F2D3C5C89FCA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 84880BA6D29A6239877AD004 /* Project object */;
@@ -79,6 +88,7 @@
 		2FC0B021EF25FFB83D1ADB3E /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		35C5A39788EB8DCCFC1DBBDE /* Editors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editors.swift; sourceTree = "<group>"; };
 		4FC4DA810D856F6DBFC6DA18 /* AriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaApp.swift; sourceTree = "<group>"; };
+		51F4FF5A1D794EC50D18CC11 /* AriaUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AriaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		58E428BBBE007A8FA5C283AD /* TaskIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskIntents.swift; sourceTree = "<group>"; };
 		668CAD990A80E57C14EDDAC7 /* AriaLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaLiveActivity.swift; sourceTree = "<group>"; };
 		67F1E2EC920E4957207C0C31 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -94,12 +104,14 @@
 		9867D2D64C4B67EBF0A40010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9CDBDEE37C7A98EB3ADD86AE /* Aria.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Aria.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5E44DEBFAF487A235A93A8C /* AriaActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaActivityAttributes.swift; sourceTree = "<group>"; };
+		AFC6363CB5EADC5782D3E24F /* UITestPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestPreview.swift; sourceTree = "<group>"; };
 		B887FCE90057F2ADD2BA0586 /* ItemRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRows.swift; sourceTree = "<group>"; };
 		C34445784CBC3E41269C32F8 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		C49AE0C3E09112EA1D0199DA /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		CE647013BD3876C8D9916B7B /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		D03A6EED5676468E4574910D /* EventKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitSync.swift; sourceTree = "<group>"; };
 		D0BEB55ECD4CFDDBDA9C1B0A /* SharedEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEnvironment.swift; sourceTree = "<group>"; };
+		DA99CE78B84EB25C38E27BEC /* AriaUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaUITests.swift; sourceTree = "<group>"; };
 		E72CF267175054C996E3B74B /* CalendarWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarWidget.swift; sourceTree = "<group>"; };
 		E7AEC31EAE45C23715DB820A /* AriaWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = AriaWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E88CDF8D14F87D0D49F2385A /* AriaKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AriaKit; path = AriaKit; sourceTree = SOURCE_ROOT; };
@@ -134,6 +146,7 @@
 			isa = PBXGroup;
 			children = (
 				9CDBDEE37C7A98EB3ADD86AE /* Aria.app */,
+				51F4FF5A1D794EC50D18CC11 /* AriaUITests.xctest */,
 				E7AEC31EAE45C23715DB820A /* AriaWidgets.appex */,
 			);
 			name = Products;
@@ -162,6 +175,7 @@
 				FB43DD6AA1306E13E71D7F00 /* BackgroundRefresh.swift */,
 				D03A6EED5676468E4574910D /* EventKitSync.swift */,
 				C34445784CBC3E41269C32F8 /* LiveActivityManager.swift */,
+				AFC6363CB5EADC5782D3E24F /* UITestPreview.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -208,6 +222,7 @@
 			isa = PBXGroup;
 			children = (
 				80A233B5989209119ADA5DC8 /* AriaApp */,
+				B2E6CFD45F2CBB6690B41BFA /* AriaUITests */,
 				E7597CF729B110B4E42CA527 /* AriaWidgets */,
 				69A79CA2773B07FF41744B64 /* Config */,
 				46177BFA228F60267382E6BD /* Packages */,
@@ -225,6 +240,14 @@
 				58E428BBBE007A8FA5C283AD /* TaskIntents.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		B2E6CFD45F2CBB6690B41BFA /* AriaUITests */ = {
+			isa = PBXGroup;
+			children = (
+				DA99CE78B84EB25C38E27BEC /* AriaUITests.swift */,
+			);
+			path = AriaUITests;
 			sourceTree = "<group>";
 		};
 		CA18DDE59F4CEB9B1FF72F1A /* Components */ = {
@@ -306,6 +329,24 @@
 			productReference = 9CDBDEE37C7A98EB3ADD86AE /* Aria.app */;
 			productType = "com.apple.product-type.application";
 		};
+		EA040B8164D56281F2E239A7 /* AriaUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4E2A2EA41B3BC4F54A5D056B /* Build configuration list for PBXNativeTarget "AriaUITests" */;
+			buildPhases = (
+				9511550771C174909FF51E66 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				00D708BDEF69A278AFA9572B /* PBXTargetDependency */,
+			);
+			name = AriaUITests;
+			packageProductDependencies = (
+			);
+			productName = AriaUITests;
+			productReference = 51F4FF5A1D794EC50D18CC11 /* AriaUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -322,6 +363,11 @@
 					CAE722123C010788DE868C61 = {
 						DevelopmentTeam = "$(ARIA_DEVELOPMENT_TEAM)";
 						ProvisioningStyle = Automatic;
+					};
+					EA040B8164D56281F2E239A7 = {
+						DevelopmentTeam = "$(ARIA_DEVELOPMENT_TEAM)";
+						ProvisioningStyle = Automatic;
+						TestTargetID = CAE722123C010788DE868C61;
 					};
 				};
 			};
@@ -344,6 +390,7 @@
 			targets = (
 				CAE722123C010788DE868C61 /* Aria */,
 				349FE07EB68D6F02B6E13744 /* AriaWidgets */,
+				EA040B8164D56281F2E239A7 /* AriaUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -368,6 +415,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		9511550771C174909FF51E66 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FAC83E963290306AC8447C6B /* AriaUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E2B3D21FB25021625C927281 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -391,6 +446,7 @@
 				0EC8EBFA06B1F1B5A9D3E82B /* TaskListView.swift in Sources */,
 				BE5B447C0217806F25C10C7A /* Theme.swift in Sources */,
 				325F93CC56370248D34970FF /* TodayView.swift in Sources */,
+				EEC119294EC4ECEAF4E0B464 /* UITestPreview.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,6 +469,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		00D708BDEF69A278AFA9572B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CAE722123C010788DE868C61 /* Aria */;
+			targetProxy = 104C7E73F7A8535AD012AEAC /* PBXContainerItemProxy */;
+		};
 		2953147C81ABAE9CF7CCD3D1 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 349FE07EB68D6F02B6E13744 /* AriaWidgets */;
@@ -492,6 +553,23 @@
 			};
 			name = Debug;
 		};
+		594F1703D23EFDE8A034220B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Aria;
+			};
+			name = Release;
+		};
 		5F53E19A80E46FC4C88BB16E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -533,6 +611,23 @@
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ARIA_APP";
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6D9523B578A8CF11659DBE47 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Aria;
 			};
 			name = Debug;
 		};
@@ -650,6 +745,15 @@
 			buildConfigurations = (
 				7E3FF711650B54932AD3D659 /* Debug */,
 				EC26F455E4BBB74BE1E46DF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4E2A2EA41B3BC4F54A5D056B /* Build configuration list for PBXNativeTarget "AriaUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6D9523B578A8CF11659DBE47 /* Debug */,
+				594F1703D23EFDE8A034220B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
