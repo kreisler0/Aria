@@ -1,0 +1,107 @@
+name: Web app
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["web/**", "shared/**", "supabase/**", ".github/workflows/web.yml"]
+  pull_request:
+    paths: ["web/**", "shared/**", "supabase/**", ".github/workflows/web.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit + browser end-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests (tool schema, golden system prompt, executor, planner)
+        working-directory: web
+        run: npm test
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase (applies supabase/migrations)
+        run: supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta
+      - name: Export API settings
+        run: |
+          supabase status -o env > supabase.env
+          set -a; source supabase.env; set +a
+          echo "SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-save --prefix web playwright@1.56.1
+          npx --prefix web playwright install --with-deps chromium
+
+      - name: End-to-end (served over http)
+        working-directory: web
+        run: node e2e/run.mjs
+
+      - name: Build the single-file app
+        working-directory: web
+        run: node build.mjs
+
+      - name: End-to-end (single file opened from disk)
+        working-directory: web
+        run: ARIA_E2E_URL="file://$PWD/dist/Aria.html" ARIA_E2E_OUT=e2e/out-file node e2e/run.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-screenshots
+          path: web/e2e/out*
+          if-no-files-found: ignore
+
+  # Publishes web/ to GitHub Pages from the default branch (or main). Needs Settings ▸ Pages ▸
+  # Source: "GitHub Actions". Repository variables ARIA_SUPABASE_URL / ARIA_SUPABASE_ANON_KEY,
+  # if set, are baked into config.js so nobody has to paste them (the anon key is public by
+  # design). The OpenRouter key is never part of the site.
+  deploy:
+    name: Publish to GitHub Pages
+    needs: test
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assemble the site
+        env:
+          ARIA_SUPABASE_URL: ${{ vars.ARIA_SUPABASE_URL }}
+          ARIA_SUPABASE_ANON_KEY: ${{ vars.ARIA_SUPABASE_ANON_KEY }}
+        run: |
+          mkdir -p _site
+          cp -r web/index.html web/styles.css web/icon.svg web/manifest.webmanifest web/js _site/
+          if [ -n "$ARIA_SUPABASE_URL" ] && [ -n "$ARIA_SUPABASE_ANON_KEY" ]; then
+            node -e 'console.log("window.ARIA_CONFIG = " + JSON.stringify({ supabaseUrl: process.env.ARIA_SUPABASE_URL, supabaseAnonKey: process.env.ARIA_SUPABASE_ANON_KEY }) + ";")' > _site/config.js
+            node web/build.mjs "$ARIA_SUPABASE_URL" "$ARIA_SUPABASE_ANON_KEY"
+          else
+            cp web/config.js _site/
+            node web/build.mjs
+          fi
+          cp web/dist/Aria.html _site/Aria.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

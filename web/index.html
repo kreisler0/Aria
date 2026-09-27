@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Aria</title>
+  <meta name="description" content="Aria — your planner, run by an assistant.">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141416" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Optional: config.js sets window.ARIA_CONFIG = { supabaseUrl, supabaseAnonKey } so nobody
+       has to paste them. The GitHub Pages workflow writes it from repository variables. -->
+  <script src="config.js" onerror="void 0"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="app" aria-live="polite">
+    <div class="boot"><div class="spinner" role="status" aria-label="Loading"></div></div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <noscript>Aria needs JavaScript.</noscript>
+</body>
+</html>

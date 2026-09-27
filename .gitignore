@@ -30,3 +30,8 @@ windows/AriaWindows/appsettings.Local.json
 supabase/.branches/
 supabase/.temp/
 supabase/.env
+
+# Web app build output and test screenshots
+web/dist/
+web/e2e/out*/
+web/node_modules/

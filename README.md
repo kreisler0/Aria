@@ -1,4 +1,4 @@
-# Aria: an AI-controlled planner for iPhone, iPad and Windows
+# Aria: an AI-controlled planner for iPhone, iPad, Windows and the web
 
 Aria is a daily planner (tasks, calendar, day notes) that you can run by talking to it:
 *"Add 'Finish essay' due Friday at 5pm and block Thursday evening to study"*. It is built
@@ -11,6 +11,7 @@ as the build spec describes:
 | Shared Swift code | Swift package used by the app **and** the widget extension | `ios/AriaKit` |
 | Windows app | WinUI 3 / Windows App SDK, .NET 8, Mica | `windows/AriaWindows` |
 | Shared .NET code | Models, clients, AI layer, view models (.NET 8) | `windows/Aria.Core` |
+| Web app (any browser, incl. Windows) | Plain HTML/CSS/JS modules, no build step or dependencies | `web/` |
 | Backend | Supabase: Postgres, Auth, Row-Level Security, Realtime | `supabase/` |
 | AI | OpenRouter chat completions with a fixed tool schema; the user brings their own key | `shared/ai`, `*/AI/` |
 
@@ -165,6 +166,33 @@ grid with density marks, week agenda, day notes), Tasks, Assistant and Settings.
 - The Supabase session is stored encrypted with DPAPI for your Windows user.
 - Following the spec, there are no Windows widgets.
 
+## 3a. Web app (use Aria on Windows or anywhere in a browser)
+
+`web/` is the same app for the browser: Today, Calendar (month/week, day notes), Tasks,
+Assistant and Settings, in light and dark, with a phone layout. It signs in to the **same
+Supabase project and account as the iPhone app**, so everything syncs both ways live
+(Supabase Realtime). The assistant uses the same 8 tools, the same system prompt (checked
+word for word against `shared/ai/system-prompt.golden.txt`) and the same validation rules.
+Your OpenRouter key is stored only in that browser (`localStorage`) and is sent only to
+OpenRouter, never to Supabase.
+
+There are three ways to run it:
+
+1. **Single file (simplest).** `node web/build.mjs` writes `web/dist/Aria.html`. It is one
+   self-contained file: double-click it on Windows (Edge or Chrome), or upload it anywhere.
+   `node web/build.mjs https://YOUR.supabase.co YOUR_ANON_KEY` bakes your project in, so
+   it doesn't ask. CI also builds this file; it is in the `Aria.html` of the Pages site.
+2. **GitHub Pages.** Go to Settings ▸ Pages ▸ Source and choose **GitHub Actions**, and optionally add the
+   repository *variables* `ARIA_SUPABASE_URL` and `ARIA_SUPABASE_ANON_KEY`. Pushes to the
+   default branch (or `main`) then publish via `.github/workflows/web.yml`. Pages on a
+   private repository needs a paid GitHub plan.
+3. **Any static host or local server**: serve the `web/` folder as it is (Netlify Drop,
+   Cloudflare Pages, Vercel, or `python3 -m http.server -d web`).
+
+On first launch, paste your Supabase URL and anon key (Project Settings ▸ API), sign in
+with your iPhone account, then add your OpenRouter key in Settings. In Edge or Chrome you
+can use ⋯ ▸ Apps ▸ *Install this site as an app* to get a taskbar icon and its own window.
+
 ## 4. Tests and CI
 
 | What | Where | Command |
@@ -172,6 +200,8 @@ grid with density marks, week agenda, day notes), Tasks, Assistant and Settings.
 | Schema, RLS, triggers (pgTAP, 33 checks) | `supabase/tests` | `supabase start && supabase test db` |
 | AriaKit (Swift; runs on macOS **and** Linux) | `ios/AriaKit/Tests` | `swift test --package-path ios/AriaKit` |
 | Aria.Core (C#) | `windows/Aria.Core.Tests` | `dotnet test windows/Aria.Core.Tests` |
+| Web app logic (Node 22) | `web/tests` | `cd web && npm test` |
+| Web app in Chromium (Playwright) | `web/e2e/run.mjs` | `SUPABASE_URL=… SUPABASE_ANON_KEY=… node web/e2e/run.mjs` |
 
 The Swift and C# suites cover date handling, model coding, the Supabase and OpenRouter
 clients (token refresh, retries, error mapping), every tool (including rejection of bad
@@ -188,6 +218,13 @@ tool loop against the database (with a scripted model), and the Windows view mod
 end.
 
 GitHub Actions (`.github/workflows/`):
+- **Web app**: runs the web unit tests, then the browser end-to-end test against a local
+  Supabase, twice: once served over HTTP and once as the single `Aria.html` opened from
+  disk. The browser test covers backend setup, sign-up, tasks, the calendar with all-day
+  events and day notes, the assistant (OpenRouter mocked) and a live change arriving over
+  Realtime. It also checks the model setting, dark mode and the phone layout, and that the
+  OpenRouter key never reaches Supabase. It then publishes to GitHub Pages when Pages is
+  enabled.
 - **iOS** (macOS): builds the app and widget extension for the simulator, runs AriaKit's
   tests, and checks that the extension is embedded and that the Xcode project matches
   `project.yml`. It also runs the UI tests (`ios/AriaUITests`) on an iPhone and an iPad
