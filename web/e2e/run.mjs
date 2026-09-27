@@ -75,6 +75,7 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
 const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: "America/New_York", locale: "en-US" });
 // Start as a fresh install with no backend baked in (config.js may name a real project).
 await context.addInitScript(() => {
+  if (location.protocol === "about:") return;
   if (!sessionStorage.getItem("aria.e2e.preset")) window.ARIA_CONFIG = { supabaseUrl: "", supabaseAnonKey: "" };
 });
 const page = await context.newPage();
@@ -364,7 +365,7 @@ try {
       window.name = JSON.stringify({ url, key });
     }, [SUPABASE_URL, ANON]);
     await context.addInitScript(() => {
-      if (sessionStorage.getItem("aria.e2e.preset") && window.name) {
+      if (location.protocol !== "about:" && sessionStorage.getItem("aria.e2e.preset") && window.name) {
         const { url, key } = JSON.parse(window.name);
         window.ARIA_CONFIG = { supabaseUrl: url, supabaseAnonKey: key };
       }
@@ -376,6 +377,39 @@ try {
     await page.getByLabel("Password").fill(password);
     await page.locator("form button[type=submit]").click();
     await page.locator("nav.sidebar").waitFor(); // back in the app, on the last screen used
+  });
+
+  await step("unconfirmed email: clear message, resend, and the email link signs you in", async () => {
+    await page.evaluate(() => localStorage.removeItem("aria.session"));
+    await page.reload();
+    await page.getByText("Your planner, run by an assistant.").waitFor();
+    // Hosted Supabase refuses unconfirmed accounts like this.
+    await page.route("**/auth/v1/token?grant_type=password", (route) =>
+      route.fulfill({ status: 400, json: { code: 400, error_code: "email_not_confirmed", msg: "Email not confirmed" } }));
+    let resent = null;
+    await page.route("**/auth/v1/resend**", (route) => {
+      resent = route.request().postDataJSON();
+      return route.fulfill({ json: {} });
+    });
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.locator("form button[type=submit]").click();
+    await page.getByText("Confirm your email first").waitFor();
+    await page.getByRole("button", { name: "Resend confirmation email" }).click();
+    await page.getByText(`we sent a new confirmation link to ${email}`).waitFor();
+    assert.deepEqual(resent, { type: "signup", email });
+    await page.unroute("**/auth/v1/token?grant_type=password");
+    await page.unroute("**/auth/v1/resend**");
+
+    // The confirmation link redirects back with the session in the fragment.
+    const grant = await (await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" }, body: JSON.stringify({ email, password }),
+    })).json();
+    await page.goto("about:blank");
+    await page.goto(`${APP}#access_token=${grant.access_token}&expires_in=3600&refresh_token=${grant.refresh_token}&token_type=bearer&type=signup`);
+    await page.locator("nav.sidebar").waitFor();
+    assert.ok(!(await page.evaluate(() => location.href)).includes("access_token"), "tokens are removed from the address bar");
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("aria.session")).user.email), email);
   });
 
   assert.deepEqual(consoleErrors, [], "no script errors");

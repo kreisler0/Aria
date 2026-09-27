@@ -156,6 +156,15 @@ function connect() {
   state.client.onSessionChange = (session) => {
     if (!session && state.started) signedOut("Your session ended. Sign in again.");
   };
+  // Back from an email link (sign-up confirmation): the tokens are in the URL fragment.
+  if (/(^#|&)(access_token|error)=/.test(location.hash)) {
+    const hash = location.hash;
+    history.replaceState(null, "", location.pathname + location.search);
+    state.client.sessionFromRedirect(hash)
+      .then((signedIn) => (signedIn ? startApp() : renderLogin()))
+      .catch((error) => renderLogin(error.message));
+    return;
+  }
   if (state.client.session) startApp();
   else renderLogin();
 }
@@ -208,7 +217,7 @@ function renderSetup(error = "", typed = null) {
   });
 }
 
-function renderLogin(message = "", mode = "signin") {
+function renderLogin(message = "", mode = "signin", resendTo = "") {
   const creating = mode === "signup";
   $("#app").innerHTML = `
     <div class="welcome"><form class="card" id="login-form" novalidate>
@@ -220,6 +229,7 @@ function renderLogin(message = "", mode = "signin") {
         <button type="button" data-mode="signup" aria-pressed="${creating}">Create account</button>
       </div>
       ${message ? `<p class="${message.startsWith("Check") ? "help" : "error-text"}" role="alert">${esc(message)}</p>` : ""}
+      ${resendTo ? `<button class="btn" type="button" data-resend style="width:100%;margin-bottom:14px">Resend confirmation email</button>` : ""}
       ${creating ? '<label class="field">Name<input type="text" name="name" autocomplete="name" placeholder="Ada Lovelace"></label>' : ""}
       <label class="field">Email<input type="email" name="email" autocomplete="email" required></label>
       <label class="field">Password<input type="password" name="password" autocomplete="${creating ? "new-password" : "current-password"}" minlength="6" required></label>
@@ -229,6 +239,16 @@ function renderLogin(message = "", mode = "signin") {
     </form></div>`;
   const form = $("#login-form");
   form.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => renderLogin("", b.dataset.mode)));
+  form.querySelector("[data-resend]")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    try {
+      await state.client.resendConfirmation(resendTo);
+      renderLogin(`Check your email: we sent a new confirmation link to ${resendTo}.`, "signin");
+    } catch (error) {
+      renderLogin(error.message, "signin", resendTo);
+    }
+  });
+  if (resendTo) form.email.value = resendTo;
   form.querySelector("[data-change-backend]")?.addEventListener("click", (e) => {
     e.preventDefault();
     renderSetup();
@@ -244,13 +264,13 @@ function renderLogin(message = "", mode = "signin") {
     try {
       if (creating) {
         const result = await state.client.signUp(email, password, form.name.value.trim());
-        if (result.needsConfirmation) return renderLogin("Check your email to confirm your account, then sign in.", "signin");
+        if (result.needsConfirmation) return renderLogin(`Check your email: open the confirmation link we sent to ${email} (look in spam too), then sign in.`, "signin");
       } else {
         await state.client.signIn(email, password);
       }
       startApp();
     } catch (error) {
-      renderLogin(error.message, mode);
+      renderLogin(error.message, mode, error.code === "email_not_confirmed" ? email : "");
     }
   });
   (form.email.value ? form.password : form.email)?.focus();

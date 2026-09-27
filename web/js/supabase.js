@@ -4,10 +4,18 @@
 import { formatUTC, overlaps } from "./dates.js";
 
 export class SupabaseError extends Error {
-  constructor(message, status = 0) {
+  constructor(message, status = 0, code = "") {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+
+/** Where email links (confirmation, magic links) should bring the user back to: this page,
+ *  when it is served over http(s). */
+function redirectTarget() {
+  const here = globalThis.location;
+  return here && /^https?:$/.test(here.protocol) ? `${here.origin}${here.pathname}` : null;
 }
 
 const date = (value) => (value ? new Date(value) : null);
@@ -46,6 +54,11 @@ function eventRow(fields) {
   return row;
 }
 
+function withRedirect(path) {
+  const target = redirectTarget();
+  return target ? `${path}?redirect_to=${encodeURIComponent(target)}` : path;
+}
+
 /** "https://abc.supabase.co" (trailing slashes and a pasted /rest/v1 are dropped) or null. */
 export function normalizeUrl(text) {
   let url;
@@ -82,12 +95,44 @@ export class SupabaseClient {
   }
 
   async signUp(email, password, name) {
-    const json = await this.authRequest("signup", { email, password, data: name ? { full_name: name } : {} });
+    const json = await this.authRequest(withRedirect("signup"), { email, password, data: name ? { full_name: name } : {} });
     if (json.access_token) {
       this.setSession(json);
       return { user: this.user, needsConfirmation: false };
     }
     return { user: null, needsConfirmation: true };
+  }
+
+  /** Sends the sign-up confirmation email again. */
+  resendConfirmation(email) {
+    return this.authRequest(withRedirect("resend"), { type: "signup", email });
+  }
+
+  /** Signs in from the tokens in an email link's redirect (#access_token=…&refresh_token=…).
+   *  Returns true when the URL carried a session, and throws when it carried an error. */
+  async sessionFromRedirect(hash) {
+    const params = new URLSearchParams((hash ?? "").replace(/^#/, ""));
+    if (params.get("error_description") || params.get("error")) {
+      throw new SupabaseError(params.get("error_description") || params.get("error"), 400, params.get("error_code") ?? "");
+    }
+    const token = params.get("access_token");
+    if (!token) return false;
+    let response;
+    try {
+      response = await this.fetch(`${this.url}/auth/v1/user`, { headers: { apikey: this.anonKey, Authorization: `Bearer ${token}` } });
+    } catch {
+      throw new SupabaseError("Couldn't reach your Supabase project. Check your connection.");
+    }
+    if (!response.ok) throw new SupabaseError("That link has expired. Sign in instead.", response.status);
+    const user = await response.json();
+    this.setSession({
+      access_token: token,
+      refresh_token: params.get("refresh_token"),
+      expires_at: Number(params.get("expires_at")) || undefined,
+      expires_in: Number(params.get("expires_in")) || 3600,
+      user,
+    });
+    return true;
   }
 
   async signOut() {
@@ -110,7 +155,11 @@ export class SupabaseClient {
     const json = await response.json().catch(() => ({}));
     if (!response.ok) {
       const message = json.msg || json.error_description || json.message || json.error || `Sign-in failed (${response.status}).`;
-      throw new SupabaseError(message === "Invalid login credentials" ? "That email and password don't match an account." : message, response.status);
+      const code = json.error_code || (/email not confirmed/i.test(message) ? "email_not_confirmed" : "");
+      if (code === "email_not_confirmed") {
+        throw new SupabaseError("Confirm your email first: open the link Supabase emailed you (check spam), then sign in.", response.status, code);
+      }
+      throw new SupabaseError(message === "Invalid login credentials" ? "That email and password don't match an account." : message, response.status, code);
     }
     return json;
   }
