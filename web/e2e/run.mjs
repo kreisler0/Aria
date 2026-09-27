@@ -141,9 +141,13 @@ try {
     await page.getByRole("heading", { name: "Connect your backend" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Connect" }).isDisabled(), true);
     await page.getByLabel("Supabase project URL").fill(`${SUPABASE_URL}/rest/v1/`);
-    await page.getByLabel("Anon (publishable) key").fill("wrong-key");
-    await page.getByRole("button", { name: "Connect" }).click();
-    await page.getByText("Supabase didn't accept that key").waitFor();
+    // Some Supabase gateways don't check the key on this endpoint; test the message where they do.
+    const probe = await fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: "wrong-key" } });
+    if (probe.status === 401 || probe.status === 403) {
+      await page.getByLabel("Anon (publishable) key").fill("wrong-key");
+      await page.getByRole("button", { name: "Connect" }).click();
+      await page.getByText("Supabase didn't accept that key").waitFor();
+    }
     await page.getByLabel("Anon (publishable) key").fill(ANON);
     await page.getByRole("button", { name: "Connect" }).click();
     await page.getByRole("heading", { name: "Aria" }).waitFor();
