@@ -73,6 +73,10 @@ async function step(name, fn) {
 
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: "America/New_York", locale: "en-US" });
+// Start as a fresh install with no backend baked in (config.js may name a real project).
+await context.addInitScript(() => {
+  if (!sessionStorage.getItem("aria.e2e.preset")) window.ARIA_CONFIG = { supabaseUrl: "", supabaseAnonKey: "" };
+});
 const page = await context.newPage();
 const consoleErrors = [];
 page.on("pageerror", (e) => consoleErrors.push(String(e)));
@@ -347,6 +351,27 @@ try {
     await page.getByRole("button", { name: "Sign Out" }).click();
     await page.getByText("Your planner, run by an assistant.").waitFor();
     assert.equal(await page.evaluate(() => localStorage.getItem("aria.session")), null);
+  });
+
+  await step("a baked-in backend skips setup and goes straight to sign-in", async () => {
+    await page.evaluate(([url, key]) => {
+      localStorage.clear();
+      sessionStorage.setItem("aria.e2e.preset", "1");
+      window.name = JSON.stringify({ url, key });
+    }, [SUPABASE_URL, ANON]);
+    await context.addInitScript(() => {
+      if (sessionStorage.getItem("aria.e2e.preset") && window.name) {
+        const { url, key } = JSON.parse(window.name);
+        window.ARIA_CONFIG = { supabaseUrl: url, supabaseAnonKey: key };
+      }
+    });
+    await page.reload();
+    await page.getByText("Your planner, run by an assistant.").waitFor();
+    assert.equal(await page.getByText("Use a different Supabase project").count(), 0);
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.locator("form button[type=submit]").click();
+    await page.locator("nav.sidebar").waitFor(); // back in the app, on the last screen used
   });
 
   assert.deepEqual(consoleErrors, [], "no script errors");
