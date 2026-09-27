@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="AriaWindows.Views.CalendarPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:AriaWindows.Controls"
+    xmlns:helpers="using:AriaWindows.Helpers"
+    xmlns:vm="using:Aria.Core.ViewModels"
+    Background="Transparent">
+
+    <Grid Padding="40,28,40,24" ColumnSpacing="24" RowSpacing="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Style="{StaticResource PageTitleStyle}" Text="Calendar" />
+        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+            <RadioButtons x:Name="ModePicker" MaxColumns="2" SelectionChanged="ModePicker_SelectionChanged">
+                <x:String>Month</x:String>
+                <x:String>Week</x:String>
+            </RadioButtons>
+            <DropDownButton Content="New" Style="{StaticResource AccentButtonStyle}">
+                <DropDownButton.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyoutItem Click="NewEvent_Click" Text="Event" />
+                        <MenuFlyoutItem Click="NewTask_Click" Text="Task" />
+                    </MenuFlyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+        </StackPanel>
+
+        <!-- Month grid (density marks show days with events / open tasks). -->
+        <Border Grid.Row="1" VerticalAlignment="Top" Padding="8" Style="{StaticResource GlassCardStyle}"
+                Visibility="{x:Bind helpers:Ui.Collapsed(ViewModel.IsWeekMode), Mode=OneWay}">
+            <CalendarView
+                x:Name="MonthView"
+                Background="Transparent"
+                BorderThickness="0"
+                CalendarViewDayItemChanging="MonthView_DayItemChanging"
+                SelectedDatesChanged="MonthView_SelectedDatesChanged"
+                SelectionMode="Single" />
+        </Border>
+
+        <!-- Week agenda. -->
+        <ScrollViewer Grid.Row="1" Grid.ColumnSpan="2" Visibility="{x:Bind helpers:Ui.Visible(ViewModel.IsWeekMode), Mode=OneWay}">
+            <ItemsControl ItemsSource="{x:Bind ViewModel.WeekAgenda}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DayAgendaViewModel">
+                        <Border Margin="0,0,0,12" Style="{StaticResource GlassCardStyle}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />
+                                <ListView IsItemClickEnabled="True" ItemClick="Item_Click" ItemsSource="{x:Bind Items}" SelectionMode="None">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ItemRowViewModel">
+                                            <controls:ItemRow Row="{x:Bind}" />
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Selected day: agenda + notes (planner_days). -->
+        <ScrollViewer Grid.Row="1" Grid.Column="1" Visibility="{x:Bind helpers:Ui.Collapsed(ViewModel.IsWeekMode), Mode=OneWay}">
+            <StackPanel MaxWidth="720" HorizontalAlignment="Stretch" Spacing="16">
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="{x:Bind ViewModel.SelectedDayTitle, Mode=OneWay}" />
+                <Border Style="{StaticResource GlassCardStyle}">
+                    <Grid>
+                        <ListView IsItemClickEnabled="True" ItemClick="Item_Click" ItemsSource="{x:Bind ViewModel.DayItems}" SelectionMode="None">
+                            <ListView.ItemContainerTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition />
+                                    <ContentThemeTransition />
+                                </TransitionCollection>
+                            </ListView.ItemContainerTransitions>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ItemRowViewModel">
+                                    <controls:ItemRow Row="{x:Bind}" />
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Nothing planned."
+                            Visibility="{x:Bind helpers:Ui.Visible(ViewModel.DayIsEmpty), Mode=OneWay}" />
+                    </Grid>
+                </Border>
+                <Border Style="{StaticResource GlassCardStyle}">
+                    <TextBox
+                        MinHeight="96"
+                        AcceptsReturn="True"
+                        Header="Notes"
+                        PlaceholderText="Anything to remember for this day?"
+                        Text="{x:Bind ViewModel.DayNotes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

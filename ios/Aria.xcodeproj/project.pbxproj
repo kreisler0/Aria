@@ -1,0 +1,800 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0EC8EBFA06B1F1B5A9D3E82B /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FC0B021EF25FFB83D1ADB3E /* TaskListView.swift */; };
+		197B9025AEAB2195AF5F39C8 /* AriaActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E44DEBFAF487A235A93A8C /* AriaActivityAttributes.swift */; };
+		1D508B2D6FFAF3B763454D4A /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11806A218C0EE2424049BB9 /* AppModel.swift */; };
+		25B1F6A0BC0E5C44860F2D53 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB43DD6AA1306E13E71D7F00 /* BackgroundRefresh.swift */; };
+		279F0E067EBB05ADF83D1732 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1534EF073F08AD8F7C719FF4 /* RootView.swift */; };
+		325F93CC56370248D34970FF /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE647013BD3876C8D9916B7B /* TodayView.swift */; };
+		34D049DF9A4624832D367C73 /* QuickAddWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7892635C2609EE657077D4B2 /* QuickAddWidget.swift */; };
+		404AB8AA8DF1A55858402EB6 /* TaskWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06DBAB048818A18D93231426 /* TaskWidget.swift */; };
+		447B3C49292CE9AD390388E4 /* TaskIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E428BBBE007A8FA5C283AD /* TaskIntents.swift */; };
+		472384B8B0C33D4F79CDA8DE /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92E4D88B36EC0D2D51AC9F2E /* MainView.swift */; };
+		48101628910A0915B1B8C63C /* AriaLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 668CAD990A80E57C14EDDAC7 /* AriaLiveActivity.swift */; };
+		4D38B9D0A246AEE72DA83BBD /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 847CB976166F50B479D95734 /* SwiftUI.framework */; };
+		509701A27FCE73E48B6459FC /* AriaActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E44DEBFAF487A235A93A8C /* AriaActivityAttributes.swift */; };
+		5B207285957D81BEB3A8F7C6 /* EventKitSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D03A6EED5676468E4574910D /* EventKitSync.swift */; };
+		640C91797235D9B4EAD6A376 /* SharedEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BEB55ECD4CFDDBDA9C1B0A /* SharedEnvironment.swift */; };
+		6AAFE15CAFF317E584CAFA90 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C49AE0C3E09112EA1D0199DA /* WidgetKit.framework */; };
+		6B0780B4B34CFF319BCA193B /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 055E4E32A32DF5460232DD2D /* CalendarView.swift */; };
+		73E1D95D5E762C2632629254 /* AriaWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E7AEC31EAE45C23715DB820A /* AriaWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		751673D1FAAD95A0F819FE8F /* QuickAddView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0F1001880FBC8C70907A91 /* QuickAddView.swift */; };
+		75AB90107ABA62F4D8E7BA6E /* TaskIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E428BBBE007A8FA5C283AD /* TaskIntents.swift */; };
+		7C1773A478ADAAFFCDB910AD /* AriaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 130655649FD5B1AA376BDFE1 /* AriaKit */; };
+		7D4BE35C59DAD5C60879E41D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80FE777AAA2B129AD0C597CC /* SettingsView.swift */; };
+		84A52D3FF9BA9CCC0D85DF8E /* CalendarWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72CF267175054C996E3B74B /* CalendarWidget.swift */; };
+		899F4D3F50695B0BB484470B /* WidgetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D80A80B2D10BFCADA234FA9 /* WidgetData.swift */; };
+		93AB1484F9BB40008DBF7565 /* AriaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 94B39F8AD931A0937DB5CD6D /* AriaKit */; };
+		94EA71EFA87F92349BD9B2F6 /* ItemRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = B887FCE90057F2ADD2BA0586 /* ItemRows.swift */; };
+		957931096B9610B97D08A7D8 /* AIChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BF2D00B56F5783CCA3D8B9A /* AIChatView.swift */; };
+		98C63F764FF31FE81155141A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6C4DAF059C81EBFF9EC440BE /* Assets.xcassets */; };
+		9E7A303F59175E1BD6F0C410 /* SharedEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BEB55ECD4CFDDBDA9C1B0A /* SharedEnvironment.swift */; };
+		AAF76F0337F70B23EC1E0B4B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9113F307BB35B9B847FA7254 /* Assets.xcassets */; };
+		B06E23C8FD098ADAC9CDBC08 /* AriaWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 244A68C990E0E52F049D7F74 /* AriaWidgetsBundle.swift */; };
+		B12477E23B411E2490CCD9BE /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C34445784CBC3E41269C32F8 /* LiveActivityManager.swift */; };
+		BE5B447C0217806F25C10C7A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734DB421DFCA142E99A9ED91 /* Theme.swift */; };
+		C3A6E32676FB356E6C9D1AF9 /* AriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC4DA810D856F6DBFC6DA18 /* AriaApp.swift */; };
+		EEC119294EC4ECEAF4E0B464 /* UITestPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC6363CB5EADC5782D3E24F /* UITestPreview.swift */; };
+		EF170EA3DF82D5EF77FBD33C /* Editors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C5A39788EB8DCCFC1DBBDE /* Editors.swift */; };
+		FAC83E963290306AC8447C6B /* AriaUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA99CE78B84EB25C38E27BEC /* AriaUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		104C7E73F7A8535AD012AEAC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 84880BA6D29A6239877AD004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CAE722123C010788DE868C61;
+			remoteInfo = Aria;
+		};
+		C09BA722A8C5F2D3C5C89FCA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 84880BA6D29A6239877AD004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 349FE07EB68D6F02B6E13744;
+			remoteInfo = AriaWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		53EFB71730FE0EF3A7138339 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				73E1D95D5E762C2632629254 /* AriaWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		055E4E32A32DF5460232DD2D /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		06DBAB048818A18D93231426 /* TaskWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskWidget.swift; sourceTree = "<group>"; };
+		0D7B459B3C6CA68FE3CF462C /* Aria.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Aria.entitlements; sourceTree = "<group>"; };
+		1534EF073F08AD8F7C719FF4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		20B46302CC36EB33FE68A390 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		22F6B8B8478BA9532DC51E5A /* AriaWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AriaWidgets.entitlements; sourceTree = "<group>"; };
+		244A68C990E0E52F049D7F74 /* AriaWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaWidgetsBundle.swift; sourceTree = "<group>"; };
+		2FC0B021EF25FFB83D1ADB3E /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+		35C5A39788EB8DCCFC1DBBDE /* Editors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editors.swift; sourceTree = "<group>"; };
+		4FC4DA810D856F6DBFC6DA18 /* AriaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaApp.swift; sourceTree = "<group>"; };
+		51F4FF5A1D794EC50D18CC11 /* AriaUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AriaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		58E428BBBE007A8FA5C283AD /* TaskIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskIntents.swift; sourceTree = "<group>"; };
+		668CAD990A80E57C14EDDAC7 /* AriaLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaLiveActivity.swift; sourceTree = "<group>"; };
+		67F1E2EC920E4957207C0C31 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6C4DAF059C81EBFF9EC440BE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6D80A80B2D10BFCADA234FA9 /* WidgetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetData.swift; sourceTree = "<group>"; };
+		734DB421DFCA142E99A9ED91 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		7892635C2609EE657077D4B2 /* QuickAddWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAddWidget.swift; sourceTree = "<group>"; };
+		7BF2D00B56F5783CCA3D8B9A /* AIChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIChatView.swift; sourceTree = "<group>"; };
+		80FE777AAA2B129AD0C597CC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		847CB976166F50B479D95734 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		9113F307BB35B9B847FA7254 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		92E4D88B36EC0D2D51AC9F2E /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		9867D2D64C4B67EBF0A40010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9CDBDEE37C7A98EB3ADD86AE /* Aria.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Aria.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A5E44DEBFAF487A235A93A8C /* AriaActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaActivityAttributes.swift; sourceTree = "<group>"; };
+		AFC6363CB5EADC5782D3E24F /* UITestPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestPreview.swift; sourceTree = "<group>"; };
+		B887FCE90057F2ADD2BA0586 /* ItemRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemRows.swift; sourceTree = "<group>"; };
+		C34445784CBC3E41269C32F8 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		C49AE0C3E09112EA1D0199DA /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		CE647013BD3876C8D9916B7B /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		D03A6EED5676468E4574910D /* EventKitSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitSync.swift; sourceTree = "<group>"; };
+		D0BEB55ECD4CFDDBDA9C1B0A /* SharedEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEnvironment.swift; sourceTree = "<group>"; };
+		DA99CE78B84EB25C38E27BEC /* AriaUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AriaUITests.swift; sourceTree = "<group>"; };
+		E72CF267175054C996E3B74B /* CalendarWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarWidget.swift; sourceTree = "<group>"; };
+		E7AEC31EAE45C23715DB820A /* AriaWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = AriaWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E88CDF8D14F87D0D49F2385A /* AriaKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AriaKit; path = AriaKit; sourceTree = SOURCE_ROOT; };
+		ED0F1001880FBC8C70907A91 /* QuickAddView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickAddView.swift; sourceTree = "<group>"; };
+		F11806A218C0EE2424049BB9 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		FB43DD6AA1306E13E71D7F00 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3306ADA892DF76E3510EF56B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C1773A478ADAAFFCDB910AD /* AriaKit in Frameworks */,
+				6AAFE15CAFF317E584CAFA90 /* WidgetKit.framework in Frameworks */,
+				4D38B9D0A246AEE72DA83BBD /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3CC3151821F109B0CCAEBE51 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93AB1484F9BB40008DBF7565 /* AriaKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2B8BFC05C6B9A31A6AC9E9DA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9CDBDEE37C7A98EB3ADD86AE /* Aria.app */,
+				51F4FF5A1D794EC50D18CC11 /* AriaUITests.xctest */,
+				E7AEC31EAE45C23715DB820A /* AriaWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		38ACC6392D9A79D89EC2EA01 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				847CB976166F50B479D95734 /* SwiftUI.framework */,
+				C49AE0C3E09112EA1D0199DA /* WidgetKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		46177BFA228F60267382E6BD /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				E88CDF8D14F87D0D49F2385A /* AriaKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		5F5598BCB68A9FD58C8DC2A2 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				FB43DD6AA1306E13E71D7F00 /* BackgroundRefresh.swift */,
+				D03A6EED5676468E4574910D /* EventKitSync.swift */,
+				C34445784CBC3E41269C32F8 /* LiveActivityManager.swift */,
+				AFC6363CB5EADC5782D3E24F /* UITestPreview.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		69A79CA2773B07FF41744B64 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				20B46302CC36EB33FE68A390 /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		80A233B5989209119ADA5DC8 /* AriaApp */ = {
+			isa = PBXGroup;
+			children = (
+				5F5598BCB68A9FD58C8DC2A2 /* Services */,
+				9294F4DB87520B68D12A3B54 /* Views */,
+				F11806A218C0EE2424049BB9 /* AppModel.swift */,
+				0D7B459B3C6CA68FE3CF462C /* Aria.entitlements */,
+				4FC4DA810D856F6DBFC6DA18 /* AriaApp.swift */,
+				9113F307BB35B9B847FA7254 /* Assets.xcassets */,
+				9867D2D64C4B67EBF0A40010 /* Info.plist */,
+			);
+			path = AriaApp;
+			sourceTree = "<group>";
+		};
+		9294F4DB87520B68D12A3B54 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				CA18DDE59F4CEB9B1FF72F1A /* Components */,
+				7BF2D00B56F5783CCA3D8B9A /* AIChatView.swift */,
+				055E4E32A32DF5460232DD2D /* CalendarView.swift */,
+				92E4D88B36EC0D2D51AC9F2E /* MainView.swift */,
+				ED0F1001880FBC8C70907A91 /* QuickAddView.swift */,
+				1534EF073F08AD8F7C719FF4 /* RootView.swift */,
+				80FE777AAA2B129AD0C597CC /* SettingsView.swift */,
+				2FC0B021EF25FFB83D1ADB3E /* TaskListView.swift */,
+				CE647013BD3876C8D9916B7B /* TodayView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A8A1ABB386043F85335C45DF = {
+			isa = PBXGroup;
+			children = (
+				80A233B5989209119ADA5DC8 /* AriaApp */,
+				B2E6CFD45F2CBB6690B41BFA /* AriaUITests */,
+				E7597CF729B110B4E42CA527 /* AriaWidgets */,
+				69A79CA2773B07FF41744B64 /* Config */,
+				46177BFA228F60267382E6BD /* Packages */,
+				B11328873F9B7FC11D827389 /* Shared */,
+				38ACC6392D9A79D89EC2EA01 /* Frameworks */,
+				2B8BFC05C6B9A31A6AC9E9DA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B11328873F9B7FC11D827389 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A5E44DEBFAF487A235A93A8C /* AriaActivityAttributes.swift */,
+				D0BEB55ECD4CFDDBDA9C1B0A /* SharedEnvironment.swift */,
+				58E428BBBE007A8FA5C283AD /* TaskIntents.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		B2E6CFD45F2CBB6690B41BFA /* AriaUITests */ = {
+			isa = PBXGroup;
+			children = (
+				DA99CE78B84EB25C38E27BEC /* AriaUITests.swift */,
+			);
+			path = AriaUITests;
+			sourceTree = "<group>";
+		};
+		CA18DDE59F4CEB9B1FF72F1A /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				35C5A39788EB8DCCFC1DBBDE /* Editors.swift */,
+				B887FCE90057F2ADD2BA0586 /* ItemRows.swift */,
+				734DB421DFCA142E99A9ED91 /* Theme.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		E3A6DB41F510FC7EEDEAD02F /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				668CAD990A80E57C14EDDAC7 /* AriaLiveActivity.swift */,
+			);
+			path = LiveActivity;
+			sourceTree = "<group>";
+		};
+		E7597CF729B110B4E42CA527 /* AriaWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				E3A6DB41F510FC7EEDEAD02F /* LiveActivity */,
+				22F6B8B8478BA9532DC51E5A /* AriaWidgets.entitlements */,
+				244A68C990E0E52F049D7F74 /* AriaWidgetsBundle.swift */,
+				6C4DAF059C81EBFF9EC440BE /* Assets.xcassets */,
+				E72CF267175054C996E3B74B /* CalendarWidget.swift */,
+				67F1E2EC920E4957207C0C31 /* Info.plist */,
+				7892635C2609EE657077D4B2 /* QuickAddWidget.swift */,
+				06DBAB048818A18D93231426 /* TaskWidget.swift */,
+				6D80A80B2D10BFCADA234FA9 /* WidgetData.swift */,
+			);
+			path = AriaWidgets;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		349FE07EB68D6F02B6E13744 /* AriaWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F58003DB3B8592F63DE606F /* Build configuration list for PBXNativeTarget "AriaWidgets" */;
+			buildPhases = (
+				F193B5FB730C1D154DB25522 /* Sources */,
+				C0D381A79C340873F3A1210E /* Resources */,
+				3306ADA892DF76E3510EF56B /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AriaWidgets;
+			packageProductDependencies = (
+				130655649FD5B1AA376BDFE1 /* AriaKit */,
+			);
+			productName = AriaWidgets;
+			productReference = E7AEC31EAE45C23715DB820A /* AriaWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		CAE722123C010788DE868C61 /* Aria */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CF155AEA52373DE160837B33 /* Build configuration list for PBXNativeTarget "Aria" */;
+			buildPhases = (
+				E2B3D21FB25021625C927281 /* Sources */,
+				A6436909E1ADA5F08F2B6553 /* Resources */,
+				3CC3151821F109B0CCAEBE51 /* Frameworks */,
+				53EFB71730FE0EF3A7138339 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2953147C81ABAE9CF7CCD3D1 /* PBXTargetDependency */,
+			);
+			name = Aria;
+			packageProductDependencies = (
+				94B39F8AD931A0937DB5CD6D /* AriaKit */,
+			);
+			productName = Aria;
+			productReference = 9CDBDEE37C7A98EB3ADD86AE /* Aria.app */;
+			productType = "com.apple.product-type.application";
+		};
+		EA040B8164D56281F2E239A7 /* AriaUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4E2A2EA41B3BC4F54A5D056B /* Build configuration list for PBXNativeTarget "AriaUITests" */;
+			buildPhases = (
+				9511550771C174909FF51E66 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				00D708BDEF69A278AFA9572B /* PBXTargetDependency */,
+			);
+			name = AriaUITests;
+			packageProductDependencies = (
+			);
+			productName = AriaUITests;
+			productReference = 51F4FF5A1D794EC50D18CC11 /* AriaUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		84880BA6D29A6239877AD004 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					349FE07EB68D6F02B6E13744 = {
+						DevelopmentTeam = "$(ARIA_DEVELOPMENT_TEAM)";
+						ProvisioningStyle = Automatic;
+					};
+					CAE722123C010788DE868C61 = {
+						DevelopmentTeam = "$(ARIA_DEVELOPMENT_TEAM)";
+						ProvisioningStyle = Automatic;
+					};
+					EA040B8164D56281F2E239A7 = {
+						DevelopmentTeam = "$(ARIA_DEVELOPMENT_TEAM)";
+						ProvisioningStyle = Automatic;
+						TestTargetID = CAE722123C010788DE868C61;
+					};
+				};
+			};
+			buildConfigurationList = 7EBA1A629C0F68ED2E47746C /* Build configuration list for PBXProject "Aria" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A8A1ABB386043F85335C45DF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4A4CC7183B17520864605E44 /* XCLocalSwiftPackageReference "AriaKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2B8BFC05C6B9A31A6AC9E9DA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				CAE722123C010788DE868C61 /* Aria */,
+				349FE07EB68D6F02B6E13744 /* AriaWidgets */,
+				EA040B8164D56281F2E239A7 /* AriaUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A6436909E1ADA5F08F2B6553 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAF76F0337F70B23EC1E0B4B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0D381A79C340873F3A1210E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				98C63F764FF31FE81155141A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9511550771C174909FF51E66 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FAC83E963290306AC8447C6B /* AriaUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2B3D21FB25021625C927281 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				957931096B9610B97D08A7D8 /* AIChatView.swift in Sources */,
+				1D508B2D6FFAF3B763454D4A /* AppModel.swift in Sources */,
+				197B9025AEAB2195AF5F39C8 /* AriaActivityAttributes.swift in Sources */,
+				C3A6E32676FB356E6C9D1AF9 /* AriaApp.swift in Sources */,
+				25B1F6A0BC0E5C44860F2D53 /* BackgroundRefresh.swift in Sources */,
+				6B0780B4B34CFF319BCA193B /* CalendarView.swift in Sources */,
+				EF170EA3DF82D5EF77FBD33C /* Editors.swift in Sources */,
+				5B207285957D81BEB3A8F7C6 /* EventKitSync.swift in Sources */,
+				94EA71EFA87F92349BD9B2F6 /* ItemRows.swift in Sources */,
+				B12477E23B411E2490CCD9BE /* LiveActivityManager.swift in Sources */,
+				472384B8B0C33D4F79CDA8DE /* MainView.swift in Sources */,
+				751673D1FAAD95A0F819FE8F /* QuickAddView.swift in Sources */,
+				279F0E067EBB05ADF83D1732 /* RootView.swift in Sources */,
+				7D4BE35C59DAD5C60879E41D /* SettingsView.swift in Sources */,
+				9E7A303F59175E1BD6F0C410 /* SharedEnvironment.swift in Sources */,
+				447B3C49292CE9AD390388E4 /* TaskIntents.swift in Sources */,
+				0EC8EBFA06B1F1B5A9D3E82B /* TaskListView.swift in Sources */,
+				BE5B447C0217806F25C10C7A /* Theme.swift in Sources */,
+				325F93CC56370248D34970FF /* TodayView.swift in Sources */,
+				EEC119294EC4ECEAF4E0B464 /* UITestPreview.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F193B5FB730C1D154DB25522 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				509701A27FCE73E48B6459FC /* AriaActivityAttributes.swift in Sources */,
+				48101628910A0915B1B8C63C /* AriaLiveActivity.swift in Sources */,
+				B06E23C8FD098ADAC9CDBC08 /* AriaWidgetsBundle.swift in Sources */,
+				84A52D3FF9BA9CCC0D85DF8E /* CalendarWidget.swift in Sources */,
+				34D049DF9A4624832D367C73 /* QuickAddWidget.swift in Sources */,
+				640C91797235D9B4EAD6A376 /* SharedEnvironment.swift in Sources */,
+				75AB90107ABA62F4D8E7BA6E /* TaskIntents.swift in Sources */,
+				404AB8AA8DF1A55858402EB6 /* TaskWidget.swift in Sources */,
+				899F4D3F50695B0BB484470B /* WidgetData.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		00D708BDEF69A278AFA9572B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CAE722123C010788DE868C61 /* Aria */;
+			targetProxy = 104C7E73F7A8535AD012AEAC /* PBXContainerItemProxy */;
+		};
+		2953147C81ABAE9CF7CCD3D1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 349FE07EB68D6F02B6E13744 /* AriaWidgets */;
+			targetProxy = C09BA722A8C5F2D3C5C89FCA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		17D4A0F59942549B2792C18B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 20B46302CC36EB33FE68A390 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "$(ARIA_DEVELOPMENT_TEAM)";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		594F1703D23EFDE8A034220B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Aria;
+			};
+			name = Release;
+		};
+		5F53E19A80E46FC4C88BB16E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = AriaApp/Aria.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = AriaApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID)";
+				PRODUCT_NAME = Aria;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ARIA_APP";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5F832A146A26112711FC2162 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = AriaApp/Aria.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = AriaApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID)";
+				PRODUCT_NAME = Aria;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ARIA_APP";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6D9523B578A8CF11659DBE47 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Aria;
+			};
+			name = Debug;
+		};
+		7E3FF711650B54932AD3D659 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = AriaWidgets/AriaWidgets.entitlements;
+				INFOPLIST_FILE = AriaWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID).widgets";
+				PRODUCT_NAME = AriaWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ARIA_WIDGETS";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		92A3232B93B8E97993CCEBB9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 20B46302CC36EB33FE68A390 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "$(ARIA_DEVELOPMENT_TEAM)";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		EC26F455E4BBB74BE1E46DF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = "";
+				CODE_SIGN_ENTITLEMENTS = AriaWidgets/AriaWidgets.entitlements;
+				INFOPLIST_FILE = AriaWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(ARIA_BUNDLE_ID).widgets";
+				PRODUCT_NAME = AriaWidgets;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ARIA_WIDGETS";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1F58003DB3B8592F63DE606F /* Build configuration list for PBXNativeTarget "AriaWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7E3FF711650B54932AD3D659 /* Debug */,
+				EC26F455E4BBB74BE1E46DF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4E2A2EA41B3BC4F54A5D056B /* Build configuration list for PBXNativeTarget "AriaUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6D9523B578A8CF11659DBE47 /* Debug */,
+				594F1703D23EFDE8A034220B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7EBA1A629C0F68ED2E47746C /* Build configuration list for PBXProject "Aria" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				17D4A0F59942549B2792C18B /* Debug */,
+				92A3232B93B8E97993CCEBB9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CF155AEA52373DE160837B33 /* Build configuration list for PBXNativeTarget "Aria" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F832A146A26112711FC2162 /* Debug */,
+				5F53E19A80E46FC4C88BB16E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		4A4CC7183B17520864605E44 /* XCLocalSwiftPackageReference "AriaKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = AriaKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		130655649FD5B1AA376BDFE1 /* AriaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AriaKit;
+		};
+		94B39F8AD931A0937DB5CD6D /* AriaKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AriaKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 84880BA6D29A6239877AD004 /* Project object */;
+}

@@ -1,0 +1,18 @@
+// Build settings shared by the app and the widget extension.
+// Change these to your own identifiers before running on a device:
+//   * ARIA_BUNDLE_ID must be unique to your Apple Developer account.
+//   * ARIA_APP_GROUP must start with "group." and is used by the app and the widgets
+//     to share the Supabase session (Keychain) and the widget cache.
+//   * ARIA_DEVELOPMENT_TEAM is your 10-character Team ID (Xcode ▸ Settings ▸ Accounts).
+
+ARIA_BUNDLE_ID = com.example.aria
+ARIA_APP_GROUP = group.com.example.aria
+ARIA_DEVELOPMENT_TEAM =
+
+// Optional: bake your Supabase project into the build so users never see the
+// "Connect your backend" screen. Put the values in Secrets.xcconfig (git-ignored);
+// see Secrets.example.xcconfig. Left empty, the app asks for them on first launch.
+ARIA_SUPABASE_URL =
+ARIA_SUPABASE_ANON_KEY =
+
+#include? "Secrets.xcconfig"

@@ -1,0 +1,32 @@
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Local configuration with secrets (see ios/Config/Secrets.example.xcconfig)
+ios/Config/Secrets.xcconfig
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.binlog
+windows/AriaWindows/appsettings.Local.json
+
+# Supabase CLI
+supabase/.branches/
+supabase/.temp/
+supabase/.env

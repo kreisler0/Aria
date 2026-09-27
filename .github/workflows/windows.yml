@@ -1,0 +1,90 @@
+name: Windows
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["windows/**", "shared/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["windows/**", "shared/**", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Aria.Core on Windows
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test Aria.Core
+        run: dotnet test windows/Aria.Core.Tests/Aria.Core.Tests.csproj -c Release
+
+  build:
+    name: Build the WinUI 3 app
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Aria for Windows (x64)
+        run: dotnet build windows/AriaWindows/AriaWindows.csproj -c Release -p:Platform=x64
+
+      - name: Check the build output
+        shell: pwsh
+        run: |
+          $out = Get-ChildItem -Path windows/AriaWindows/bin -Recurse -Filter Aria.exe | Select-Object -First 1
+          if (-not $out) { throw "Aria.exe was not produced" }
+          Write-Host "Built $($out.FullName)"
+          $dir = $out.DirectoryName
+          foreach ($f in @('Microsoft.WinUI.dll', 'Aria.Core.dll', 'appsettings.json', 'Assets\Aria.ico')) {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "missing $f" }
+          }
+          if (-not (Get-ChildItem -Path $dir -Filter *.pri)) { throw "missing the resource index (.pri)" }
+          "APP_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Smoke-test launch (window opens and stays up)
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath (Join-Path $env:APP_DIR 'Aria.exe') -PassThru
+          Start-Sleep -Seconds 15
+          if ($proc.HasExited) { throw "Aria exited early with code $($proc.ExitCode)" }
+          $title = (Get-Process -Id $proc.Id).MainWindowTitle
+          if ($title -ne 'Aria') { throw "Expected the 'Aria' window, found '$title'" }
+          Write-Host "Aria is running (pid $($proc.Id)); main window: '$title'"
+          Stop-Process -Id $proc.Id -Force
+
+      # Aria.exe --self-test: Credential Locker, DPAPI session file, then every page with
+      # sample data (tick a task, open the editors, week view, theme). See SelfTest.cs.
+      - name: Self-test (every page, Credential Locker, DPAPI)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:TEMP 'aria-self-test.log'
+          Remove-Item $log -ErrorAction SilentlyContinue
+          $proc = Start-Process -FilePath (Join-Path $env:APP_DIR 'Aria.exe') -ArgumentList '--self-test' -PassThru
+          $null = $proc.Handle
+          if (-not $proc.WaitForExit(180000)) {
+            Stop-Process -Id $proc.Id -Force
+            throw "The self-test did not finish within 3 minutes"
+          }
+          if (-not (Test-Path $log)) { throw "The self-test wrote no report (exit code $($proc.ExitCode))" }
+          Get-Content $log
+          if (-not (Select-String -Path $log -Pattern '^RESULT: PASS' -Quiet)) { throw "The self-test failed (exit code $($proc.ExitCode))" }
+          Write-Host "Self-test passed (exit code $($proc.ExitCode))"
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aria-win-x64
+          path: ${{ env.APP_DIR }}

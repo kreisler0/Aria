@@ -1,0 +1,155 @@
+name: iOS
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build app + widgets, test AriaKit
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select the newest stable Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc|release_candidate' | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun simctl list runtimes | head -20 || true
+
+      - name: Test AriaKit (macOS)
+        run: swift test --package-path ios/AriaKit
+
+      - name: Build Aria + AriaWidgets for the iOS Simulator
+        run: |
+          set -o pipefail
+          if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+                 -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+                 CODE_SIGNING_ALLOWED=NO build > xcodebuild.log 2>&1; then
+            echo "::group::Errors"
+            grep -E "error:" xcodebuild.log | sort -u | head -200
+            echo "::endgroup::"
+            tail -80 xcodebuild.log
+            exit 1
+          fi
+          echo "::group::Warnings"
+          grep -E "warning:" xcodebuild.log | grep -v "appintentsmetadataprocessor" | sort -u | head -200 || true
+          echo "::endgroup::"
+          tail -5 xcodebuild.log
+
+      - name: Check the widget extension is embedded
+        run: |
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name "Aria.app" -type d | head -1)
+          ls "$APP/PlugIns"
+          test -d "$APP/PlugIns/AriaWidgets.appex"
+          /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$APP/PlugIns/AriaWidgets.appex/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :NSSupportsLiveActivities" "$APP/Info.plist"
+
+      - name: Project is in sync with project.yml
+        continue-on-error: true
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate && git diff --stat --exit-code -- Aria.xcodeproj
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
+
+  # Launches the real app: first run (backend setup), then every screen with sample data
+  # (-AriaUITestPreview). iPhone and iPad run in parallel; boot, build and test are
+  # separate steps so their timings show where time goes. See ios/AriaUITests.
+  ui-tests:
+    name: UI tests (${{ matrix.family }})
+    runs-on: macos-15
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPhone, iPad]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select the newest stable Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc|release_candidate' | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Pick the ${{ matrix.family }} simulator
+        timeout-minutes: 5
+        run: |
+          xcrun simctl list runtimes
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          family = sys.argv[1]
+          devices = json.load(sys.stdin)["devices"]
+          def version(runtime):
+              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+          for runtime in sorted((r for r in devices if ".iOS-" in r), key=version, reverse=True):
+              matches = [d for d in devices[runtime] if d["name"].startswith(family)]
+              if matches:
+                  print(matches[0]["udid"])
+                  break
+          ' "${{ matrix.family }}")
+          test -n "$UDID"
+          xcrun simctl list devices | grep "$UDID"
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Build for testing (generic simulator)
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            build-for-testing 2>&1 | tee build.log \
+            | (grep --line-buffered -E "error:|^\*\*|^(Ld|CodeSign) " || true) \
+            | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
+
+      # Booted after the build: on these small runners, booting while compiling slowed both.
+      - name: Boot the simulator
+        timeout-minutes: 10
+        run: |
+          xcrun simctl bootstatus "$UDID" -b 2>&1 | grep --line-buffered -vE "^\s*$|Status=" \
+            | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
+          xcrun simctl list devices | grep "$UDID"
+
+      - name: Run the UI tests
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+            -destination "id=$UDID" -destination-timeout 120 -derivedDataPath build/DerivedData \
+            -resultBundlePath build/UITests.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 240 \
+            test-without-building 2>&1 | tee test.log \
+            | (grep --line-buffered -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)|Testing failed|Test session|Writing result" || true) \
+            | while IFS= read -r line; do echo "$(date -u +%T) $line"; done
+
+      - name: Upload UI test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results-${{ matrix.family }}
+          path: |
+            build/UITests.xcresult
+            build.log
+            test.log
+          if-no-files-found: ignore

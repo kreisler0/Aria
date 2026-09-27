@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="AriaWindows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:AriaWindows.Helpers"
+    xmlns:views="using:AriaWindows.Views"
+    Title="Aria">
+
+    <!-- Mica: the Windows equivalent of the iOS glass materials (spec §6). -->
+    <Window.SystemBackdrop>
+        <MicaBackdrop Kind="BaseAlt" />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="AppTitleBar" Padding="16,0,0,0" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image Width="18" Height="18" VerticalAlignment="Center" Source="ms-appx:///Assets/AriaIcon.png" />
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="Aria" />
+        </Grid>
+
+        <ProgressRing
+            Grid.Row="1"
+            Width="40"
+            Height="40"
+            IsActive="{x:Bind ViewModel.IsLaunching, Mode=OneWay}" />
+
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="True"
+            IsSettingsVisible="True"
+            OpenPaneLength="220"
+            PaneDisplayMode="Auto"
+            SelectionChanged="Nav_SelectionChanged"
+            Visibility="{x:Bind helpers:Ui.Visible(ViewModel.IsSignedIn), Mode=OneWay}">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Today" Tag="today">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE706;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Calendar" Tag="calendar">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE787;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Tasks" Tag="tasks">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Assistant" Tag="assistant">
+                    <NavigationViewItem.Icon>
+                        <PathIcon Data="M8,0 L9.6,6.4 L16,8 L9.6,9.6 L8,16 L6.4,9.6 L0,8 L6.4,6.4 Z" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+
+        <views:LoginPage
+            x:Name="Login"
+            Grid.Row="1"
+            Visibility="{x:Bind helpers:Ui.Visible(ViewModel.ShowLogin), Mode=OneWay}" />
+
+        <InfoBar
+            Grid.Row="1"
+            MaxWidth="640"
+            Margin="24"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            CloseButtonClick="ErrorBar_Closed"
+            IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+            Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+            Severity="Error"
+            Title="Something went wrong" />
+    </Grid>
+</Window>
