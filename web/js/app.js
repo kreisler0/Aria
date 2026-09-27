@@ -601,39 +601,151 @@ function renderSync() {
 }
 
 /** Re-renders the current screen, keeping the focused field and what's typed in it. */
+/** Re-renders the current screen. Background refreshes usually change nothing on screen,
+ *  and then the DOM is left alone, so selections, typed text and scroll positions survive.
+ *  When something did change, every field you've typed in keeps its text, and the Assistant
+ *  is updated in place (new messages are appended). */
 function render() {
   const view = $("#view");
   if (!view) return;
   const name = route();
   document.querySelectorAll("[data-nav]").forEach((b) => b.setAttribute("aria-current", b.dataset.nav === name ? "page" : "false"));
   $("#ai-bar").hidden = name === "settings";
-  const active = document.activeElement;
-  const keep = active && view.contains(active) && active.id ? { id: active.id, value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
-  const scroll = name === route.last ? window.scrollY : 0;
+  const sameScreen = name === route.last && view.firstElementChild;
   const html = { today: viewToday, calendar: viewCalendar, tasks: viewTasks, assistant: viewAssistant, settings: viewSettings }[name]();
-  // Entrance animations play when a screen opens, not every time its data refreshes.
-  view.innerHTML = `<div class="view${name === route.last ? " still" : ""}">${html}</div>`;
-  route.last = name;
   document.title = `${ROUTES.find(([r]) => r === name)[1]} · Aria`;
-  if (keep) {
-    const el = document.getElementById(keep.id);
-    if (el) {
-      if ("value" in el && keep.value !== undefined) el.value = keep.value;
-      el.focus();
-      try {
-        el.setSelectionRange(keep.start, keep.end);
-      } catch { /* not a text field */ }
+  if (sameScreen && view.dataset.html === html) {
+    renderSync();
+    return;
+  }
+  if (!(sameScreen && name === "assistant" && patchAssistant(view, html))) {
+    const scroll = sameScreen ? window.scrollY : 0;
+    // Fields you've typed in (and where the cursor is) survive the rebuild.
+    const active = document.activeElement;
+    const typed = sameScreen ? [...view.querySelectorAll("input[id], textarea[id], select[id]")]
+      .filter((el) => el.type !== "checkbox" && (el.value !== el.defaultValue || el === active))
+      .map((el) => ({ id: el.id, value: el.value, focused: el === active, start: el.selectionStart, end: el.selectionEnd })) : [];
+    if (sameScreen) {
+      // Update only what changed, so selections and fields elsewhere are untouched.
+      const next = document.createElement("template");
+      next.innerHTML = `<div class="view still">${html}</div>`;
+      morphChildren(view.firstElementChild, next.content.firstElementChild);
+    } else {
+      // Entrance animations play when a screen opens, not every time its data refreshes.
+      view.innerHTML = `<div class="view">${html}</div>`;
     }
+    for (const t of typed) {
+      const el = document.getElementById(t.id);
+      if (!el) continue;
+      if (el.tagName !== "SELECT" || [...el.options].some((o) => o.value === t.value)) el.value = t.value;
+      if (t.focused) {
+        el.focus();
+        try {
+          el.setSelectionRange(t.start, t.end);
+        } catch { /* not a text field */ }
+      }
+    }
+    if (!sameScreen) {
+      if (name === "assistant") {
+        const chat = $("#chat");
+        if (chat) chat.scrollTop = chat.scrollHeight;
+      } else {
+        window.scrollTo(0, scroll);
+      }
+    }
+    decorate(view.firstElementChild);
   }
-  if (name === "assistant") {
-    const chat = $("#chat-end");
-    chat?.scrollIntoView({ block: "end" });
-  } else {
-    window.scrollTo(0, scroll);
-  }
+  view.dataset.html = html;
+  route.last = name;
   renderSync();
   afterRender(name);
-  decorate(view.firstElementChild);
+}
+
+/** Makes `current`'s children match `next`'s, touching only elements that differ: equal
+ *  nodes are left as they are (with their selection, focus and typed text), attributes are
+ *  updated in place, and only elements whose own text changed are replaced. */
+function morphChildren(current, next) {
+  const a = [...current.children], b = [...next.children];
+  const ownText = (el) => [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("");
+  const morph = (cur, nxt) => {
+    if (cur.isEqualNode(nxt)) return;
+    if (cur.tagName !== nxt.tagName || ownText(cur) !== ownText(nxt) || cur.tagName === "SVG" || cur.tagName === "svg") {
+      cur.replaceWith(nxt);
+      return;
+    }
+    for (const attr of [...cur.attributes]) if (!nxt.hasAttribute(attr.name)) cur.removeAttribute(attr.name);
+    for (const attr of [...nxt.attributes]) if (cur.getAttribute(attr.name) !== attr.value) cur.setAttribute(attr.name, attr.value);
+    morphChildren(cur, nxt);
+  };
+  const shared = Math.min(a.length, b.length);
+  for (let i = 0; i < shared; i++) morph(a[i], b[i]);
+  for (let i = shared; i < a.length; i++) a[i].remove();
+  for (let i = shared; i < b.length; i++) current.append(b[i]);
+}
+
+const hashText = (text) => {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (Math.imul(31, h) + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+};
+
+/** Brings the open Assistant up to date without rebuilding it: header state, the key
+ *  notice, new messages appended, the typing indicator. Scrolls only when you just sent a
+ *  message or were already at the bottom. Returns false when a full rebuild is simpler. */
+function patchAssistant(view, html) {
+  const panel = view.querySelector(".assistant-panel");
+  const chat = panel?.querySelector("#chat");
+  if (!chat) return false;
+  const next = document.createElement("template");
+  next.innerHTML = html;
+  const nextPanel = next.content.querySelector(".assistant-panel");
+  const nextChat = nextPanel?.querySelector("#chat");
+  if (!nextChat) return false;
+  const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
+
+  // Header: the orb keeps spinning; only its state, the subtitle and the Clear button change.
+  panel.querySelector(".orb")?.classList.toggle("thinking", !!nextPanel.querySelector(".orb.thinking"));
+  const title = panel.querySelector(".assistant-title"), nextTitle = nextPanel.querySelector(".assistant-title");
+  if (title && nextTitle && title.innerHTML !== nextTitle.innerHTML) title.innerHTML = nextTitle.innerHTML;
+  const head = panel.querySelector(".assistant-head");
+  const clear = head.querySelector("[data-action=clear-chat]"), nextClear = nextPanel.querySelector("[data-action=clear-chat]");
+  if (clear && !nextClear) clear.remove();
+  if (!clear && nextClear) head.append(nextClear);
+  panel.classList.toggle("is-empty", nextPanel.classList.contains("is-empty"));
+  const notice = panel.querySelector(".notice"), nextNotice = nextPanel.querySelector(".notice");
+  if (notice && !nextNotice) notice.remove();
+  if (!notice && nextNotice) head.after(nextNotice);
+
+  // Messages: append what's new; rebuild the list only if earlier ones changed (e.g. Clear).
+  const keys = (root) => [...root.querySelectorAll(":scope > [data-k]")].map((el) => el.dataset.k);
+  const have = keys(chat), want = keys(nextChat);
+  const end = chat.querySelector("#chat-end");
+  let grew = false;
+  const emptyNow = !!chat.querySelector(".assistant-empty"), emptyNext = !!nextChat.querySelector(".assistant-empty");
+  if (emptyNow !== emptyNext || have.length > want.length || have.some((k, i) => k !== want[i])) {
+    const scrollTop = chat.scrollTop;
+    chat.innerHTML = nextChat.innerHTML;
+    chat.scrollTop = scrollTop;
+    grew = want.length > 0;
+  } else {
+    for (const k of want.slice(have.length)) {
+      const el = nextChat.querySelector(`:scope > [data-k="${CSS.escape(k)}"]`);
+      el.classList.add("fresh");
+      chat.insertBefore(el, chat.querySelector(":scope > .typing") ?? end);
+      grew = true;
+    }
+    const typing = chat.querySelector(":scope > .typing"), nextTyping = nextChat.querySelector(":scope > .typing");
+    if (typing && !nextTyping) typing.remove();
+    if (!typing && nextTyping) {
+      nextTyping.classList.add("fresh");
+      chat.insertBefore(nextTyping, end);
+      grew = true;
+    }
+  }
+  if (grew && (atBottom || state.followChat)) chat.scrollTo({ top: chat.scrollHeight, behavior: reduceMotion() ? "auto" : "smooth" });
+  state.followChat = false;
+  updateLiquids();
+  return true;
 }
 
 // ---- Motion: staggered entrances, the liquid selection pill, light that follows the pointer
@@ -967,15 +1079,13 @@ function viewAssistant() {
   const model = state.profile?.openrouter_model || DEFAULT_MODEL;
   const modelName = CURATED_MODELS.find((m) => m.id === model)?.name ?? model;
   const items = [...bubbles(state.conversation), ...state.extras];
-  // Only messages that weren't on screen before bounce in.
-  const seen = state.chatSeen ?? items.length;
-  state.chatSeen = items.length;
+  // Each message carries a key, so updates can append new ones instead of rebuilding.
   const chat = items.map((b, i) => {
-    const fresh = i >= seen ? " fresh" : "";
-    if (b.kind === "action") return `<div class="chip${fresh} ${b.ok ? "" : "fail"}"><span class="chip-icon">${icon(b.ok ? "ok" : "fail")}</span>${esc(b.text)}</div>`;
+    const k = `data-k="${i}:${b.kind}:${hashText(b.text)}"`;
+    if (b.kind === "action") return `<div class="chip ${b.ok ? "" : "fail"}" ${k}><span class="chip-icon">${icon(b.ok ? "ok" : "fail")}</span>${esc(b.text)}</div>`;
     return b.kind === "assistant"
-      ? `<div class="bubble assistant md${fresh}">${markdown(b.text)}</div>`
-      : `<div class="bubble ${b.kind}${fresh}">${esc(b.text)}</div>`;
+      ? `<div class="bubble assistant md" ${k}>${markdown(b.text)}</div>`
+      : `<div class="bubble ${b.kind}" ${k}>${esc(b.text)}</div>`;
   }).join("");
   const empty = items.length === 0 && !state.pending;
   return `
@@ -993,7 +1103,7 @@ function viewAssistant() {
         ${empty ? `<div class="assistant-empty"><strong>What should we plan?</strong><span>Aria can add, complete and delete tasks, and create, move or delete events — just ask.</span>
           <div class="suggestions">${SUGGESTIONS.map((s, i) => `<button data-action="suggest" data-text="${esc(s)}" style="--i:${i}">${esc(s)}</button>`).join("")}</div></div>` : ""}
         ${chat}
-        ${state.pending ? '<div class="bubble assistant typing fresh" aria-label="Aria is thinking"><span class="goo"><i></i><i></i><i></i></span></div>' : ""}
+        ${state.pending ? '<div class="bubble assistant typing" aria-label="Aria is thinking"><span class="goo"><i></i><i></i><i></i></span></div>' : ""}
         <div id="chat-end"></div>
       </div>
     </section>`;
@@ -1007,6 +1117,7 @@ async function ask(text) {
   }
   state.pending = true;
   state.extras = [{ kind: "user", text }];
+  state.followChat = true; // you just sent something: keep the newest message in view
   render();
   const started = new Date();
   try {
@@ -1566,7 +1677,6 @@ document.addEventListener("click", async (e) => {
         await state.client.clearConversation();
         state.conversation = [];
         state.extras = [];
-        state.chatSeen = 0;
         render();
       } catch (error) {
         fail(error);

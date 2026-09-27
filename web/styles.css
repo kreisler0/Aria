@@ -301,7 +301,8 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 /* A living gradient rim. */
 .ai-bar form::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
   background: conic-gradient(from var(--rim, 0deg), var(--accent), var(--accent-2), transparent 35%, transparent 65%, var(--accent));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.7; animation: rim 8s linear infinite; }
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.6; }
+.ai-bar form:focus-within::before { opacity: 0.9; animation: rim 4s linear infinite; }
 @property --rim { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes rim { to { --rim: 360deg; } }
 .ai-bar .spark { width: 22px; height: 22px; color: var(--accent); margin-bottom: 9px; flex: none; animation: pulse 1.6s var(--ease) 3; filter: drop-shadow(0 2px 6px var(--accent-glow)); }
@@ -557,30 +558,28 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 
 .assistant-panel .notice { margin: 14px 20px 0; border-radius: 18px; background: var(--accent-soft); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); }
 
 /* The orb: three liquid blobs morphing under a glass dome. Spins up while thinking. */
-.orb { position: relative; width: 48px; height: 48px; flex: none; border-radius: 50%; isolation: isolate;
-  box-shadow: 0 8px 22px -8px var(--accent-glow), inset 0 0 0 1px rgba(255, 255, 255, 0.35); }
-.orb i { position: absolute; inset: 4%; border-radius: 42% 58% 62% 38% / 44% 40% 60% 56%; mix-blend-mode: normal; opacity: 0.9; filter: blur(1px);
+/* Only transforms animate (no per-frame reshaping or blur), so the glass behind never has
+   to be redrawn: the organic shapes turning at different speeds read as liquid. */
+.orb { position: relative; width: 48px; height: 48px; flex: none; border-radius: 50%; isolation: isolate; overflow: hidden; contain: paint;
+  transform: translateZ(0); box-shadow: 0 8px 22px -8px var(--accent-glow), inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  background: color-mix(in srgb, var(--accent) 45%, var(--accent-2)); }
+.orb i { position: absolute; inset: 2%; border-radius: 42% 58% 62% 38% / 44% 40% 60% 56%; opacity: 0.9; will-change: transform;
   background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent) 60%);
-  animation: blob 7s ease-in-out infinite, spin 9s linear infinite; }
-.orb i:nth-child(2) { inset: 10%; background: radial-gradient(circle at 70% 40%, color-mix(in srgb, var(--accent-2) 70%, #fff), var(--accent-2) 65%); opacity: 0.75; animation-duration: 9s, 12s; animation-direction: alternate, reverse; }
-.orb i:nth-child(3) { inset: 22%; background: radial-gradient(circle, #fff, color-mix(in srgb, #ff8fb1 70%, var(--accent)) 70%); opacity: 0.55; animation-duration: 5s, 7s; }
+  animation: spin 9s linear infinite; }
+.orb i:nth-child(2) { inset: 12% 6% 4% 14%; border-radius: 60% 40% 38% 62% / 55% 62% 38% 45%; background: radial-gradient(circle at 70% 40%, color-mix(in srgb, var(--accent-2) 70%, #fff), var(--accent-2) 65%); opacity: 0.8; animation-duration: 12s; animation-direction: reverse; }
+.orb i:nth-child(3) { inset: 26%; border-radius: 38% 62% 55% 45% / 38% 48% 52% 62%; background: radial-gradient(circle, #fff, color-mix(in srgb, #ff8fb1 70%, var(--accent)) 70%); opacity: 0.6; animation-duration: 6s; }
 .orb b { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 42%),
   radial-gradient(circle at 70% 85%, rgba(255, 255, 255, 0.25), transparent 40%); box-shadow: inset 0 -4px 10px rgba(0, 0, 0, 0.12); }
-.orb.thinking i { animation-duration: 1.8s, 2.4s; }
+.orb.thinking i { animation-duration: 1.6s; }
+.orb.thinking i:nth-child(2) { animation-duration: 2.2s; }
 .orb.thinking { animation: orbPulse 1.4s ease-in-out infinite; }
-@keyframes blob {
-  0%, 100% { border-radius: 42% 58% 62% 38% / 44% 40% 60% 56%; }
-  33% { border-radius: 60% 40% 38% 62% / 55% 62% 38% 45%; }
-  66% { border-radius: 38% 62% 55% 45% / 38% 48% 52% 62%; }
-}
 @keyframes orbPulse { 50% { transform: scale(1.08); box-shadow: 0 10px 30px -6px var(--accent-glow), inset 0 0 0 1px rgba(255, 255, 255, 0.4); } }
 
 .assistant-empty { margin: auto; max-width: 540px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px 0 8px; animation: rowIn 0.8s var(--spring-soft) both; }
 .assistant-empty strong { font-size: 22px; letter-spacing: -0.02em; }
 .assistant-empty span { color: var(--muted); }
 .assistant-empty .suggestions { justify-content: center; margin-top: 14px; }
-.suggestions button { animation: bubbleIn 0.7s var(--spring) both, bob 5s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 90ms), calc(var(--i, 0) * -1.2s); }
-@keyframes bob { 50% { translate: 0 -3px; } }
+.suggestions button { animation: bubbleIn 0.7s var(--spring) both; animation-delay: calc(var(--i, 0) * 90ms); }
 
 /* Bubbles: glassier, with a highlight rim; user bubbles are tinted liquid. */
 .bubble { font-size: 15.5px; line-height: 1.5; }

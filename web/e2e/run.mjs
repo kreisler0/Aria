@@ -302,6 +302,44 @@ try {
     await shot("assistant");
   });
 
+  await step("background refreshes leave the screen alone (selection, typing, chat)", async () => {
+    const refreshInBackground = async () => {
+      await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      await page.waitForTimeout(1500);
+    };
+    // Assistant: the orb and messages are the same elements afterwards, and the chat stays put.
+    await go("Assistant");
+    await page.evaluate(() => {
+      document.querySelector(".orb").dataset.probe = "same";
+      document.querySelector("#chat [data-k]").dataset.probe = "same";
+      const chat = document.querySelector("#chat");
+      for (let i = 0; i < 30; i++) chat.insertAdjacentHTML("afterbegin", '<div style="height:40px">spacer</div>');
+      chat.scrollTop = 120;
+    });
+    await refreshInBackground();
+    assert.equal(await page.evaluate(() => document.querySelector(".orb")?.dataset.probe), "same", "the orb isn't rebuilt");
+    assert.equal(await page.evaluate(() => document.querySelector("#chat [data-k]")?.dataset.probe), "same", "messages aren't rebuilt");
+    assert.equal(await page.evaluate(() => document.querySelector("#chat").scrollTop), 120, "the chat keeps its scroll position");
+
+    // Settings: highlighted text and a half-typed key survive.
+    await go("Settings");
+    await page.getByLabel(/OpenRouter API key/).fill("sk-or-half-typed");
+    await page.locator(".set-row .value").first().click({ clickCount: 3 });
+    const selected = await page.evaluate(() => getSelection().toString().trim());
+    assert.ok(selected.length > 0);
+    await refreshInBackground();
+    assert.equal(await page.evaluate(() => getSelection().toString().trim()), selected, "the highlight stays");
+    assert.equal(await page.getByLabel(/OpenRouter API key/).inputValue(), "sk-or-half-typed", "typed text stays");
+    // …also when the refresh does change something on the page (here: a device's name).
+    const thisDevice = await page.evaluate(() => localStorage.getItem("aria.deviceId"));
+    await rest(token, `devices?device_id=eq.${thisDevice}`, { method: "PATCH", body: JSON.stringify({ name: "Renamed browser" }) });
+    await refreshInBackground();
+    await page.locator(".device").getByText("Renamed browser").waitFor();
+    assert.equal(await page.evaluate(() => getSelection().toString().trim()), selected, "the highlight stays through a partial update");
+    assert.equal(await page.getByLabel(/OpenRouter API key/).inputValue(), "sk-or-half-typed", "typed text stays through a partial update");
+    await page.getByLabel(/OpenRouter API key/).fill("");
+  });
+
   await step("a change from the iPhone arrives live", async () => {
     const [task] = await rest(token, "tasks", { method: "POST", body: JSON.stringify({ title: "Call Mum", priority: 2 }) });
     await go("Tasks");
