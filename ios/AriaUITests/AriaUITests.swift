@@ -37,12 +37,12 @@ final class AriaUITests: XCTestCase {
         let field = ui.textInput("Add a task, or ask Aria…")
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
-        field.typeText("Buy oat milk")
+        field.typeText("Buy milk") // words autocorrect leaves alone
         app.buttons["Add Task"].tap()
         XCTAssertTrue(ui.disappears(app.staticTexts["Quick Add"]))
 
-        ui.openLink("aria://tasks")
-        XCTAssertTrue(app.staticTexts["Buy oat milk"].waitForExistence(timeout: 10), "Quick Add created the task")
+        ui.openTab("Tasks")
+        XCTAssertTrue(ui.reveal("milk"), "Quick Add created the task")
     }
 
     /// Calendar (the Up Next widget's link): today's agenda, the week view, the event editor.
@@ -66,13 +66,14 @@ final class AriaUITests: XCTestCase {
         let (app, ui) = launchPreview()
         ui.openLink("aria://tasks")
         XCTAssertTrue(app.staticTexts["Read a chapter"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.staticTexts["Water the plants"].exists, "completed tasks are hidden")
-        ui.element("Show completed").tap()
-        XCTAssertTrue(app.staticTexts["Water the plants"].waitForExistence(timeout: 10), "Show completed lists them")
         app.staticTexts["Call Mum"].tap()
         XCTAssertTrue(app.navigationBars["Edit Task"].waitForExistence(timeout: 10))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(ui.disappears(app.navigationBars["Edit Task"]))
+
+        XCTAssertFalse(app.staticTexts["Water the plants"].exists, "completed tasks are hidden")
+        ui.element("Show completed").tap()
+        XCTAssertTrue(ui.reveal("Water the plants"), "Show completed lists them")
     }
 
     /// The assistant asks for an OpenRouter key and shows the conversation; Settings shows
@@ -145,10 +146,23 @@ private struct UI {
             format: "elementType IN %@ AND (label == %@ OR placeholderValue == %@)", types, label, label)).firstMatch
     }
 
-    /// Text shown as an element's label or, for merged rows like LabeledContent, its value.
+    /// Text shown in an element's label (also inside merged rows such as "Name, Ada Lovelace")
+    /// or as its value.
     func showsText(_ text: String, timeout: TimeInterval = 10) -> Bool {
-        let match = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR value == %@", text, text)).firstMatch
+        let match = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value == %@", text, text)).firstMatch
         return match.waitForExistence(timeout: timeout)
+    }
+
+    /// Scrolls down until the text shows up: lists only create the rows that are on screen,
+    /// so on a small iPhone the bottom sections don't exist until scrolled to.
+    func reveal(_ text: String, swipes: Int = 4) -> Bool {
+        let match = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+        if match.waitForExistence(timeout: 5) { return true }
+        for _ in 0..<swipes {
+            app.swipeUp()
+            if match.waitForExistence(timeout: 2) { return true }
+        }
+        return false
     }
 
     func disappears(_ element: XCUIElement, timeout: TimeInterval = 10) -> Bool {
