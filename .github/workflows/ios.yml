@@ -1,0 +1,71 @@
+name: iOS
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build app + widgets, test AriaKit
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest stable Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc|release_candidate' | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcrun simctl list runtimes | head -20 || true
+
+      - name: Test AriaKit (macOS)
+        run: swift test --package-path ios/AriaKit
+
+      - name: Build Aria + AriaWidgets for the iOS Simulator
+        run: |
+          set -o pipefail
+          if ! xcodebuild -project ios/Aria.xcodeproj -scheme Aria -configuration Debug \
+                 -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+                 CODE_SIGNING_ALLOWED=NO build > xcodebuild.log 2>&1; then
+            echo "::group::Errors"
+            grep -E "error:" xcodebuild.log | sort -u | head -200
+            echo "::endgroup::"
+            tail -80 xcodebuild.log
+            exit 1
+          fi
+          echo "::group::Warnings"
+          grep -E "warning:" xcodebuild.log | grep -v "appintentsmetadataprocessor" | sort -u | head -200 || true
+          echo "::endgroup::"
+          tail -5 xcodebuild.log
+
+      - name: Check the widget extension is embedded
+        run: |
+          APP=$(find build/DerivedData/Build/Products -maxdepth 2 -name "Aria.app" -type d | head -1)
+          ls "$APP/PlugIns"
+          test -d "$APP/PlugIns/AriaWidgets.appex"
+          /usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$APP/PlugIns/AriaWidgets.appex/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :NSSupportsLiveActivities" "$APP/Info.plist"
+
+      - name: Project is in sync with project.yml
+        continue-on-error: true
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate && git diff --stat --exit-code -- Aria.xcodeproj
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore

@@ -178,7 +178,7 @@ public enum AriaDate {
 
 /// A calendar day (`yyyy-MM-dd`) independent of time zone — the `planner_days.date`
 /// column, tool-call date ranges, and all-day events all use this.
-public struct DayKey: Hashable, Comparable, Codable, Sendable, CustomStringConvertible {
+public struct DayKey: Hashable, Comparable, Codable, Identifiable, Sendable, CustomStringConvertible {
     public let year: Int
     public let month: Int
     public let day: Int
@@ -234,6 +234,7 @@ public struct DayKey: Hashable, Comparable, Codable, Sendable, CustomStringConve
     public var daysSinceEpoch: Int { AriaDate.daysFromCivil(year: year, month: month, day: day) }
 
     public var string: String { String(format: "%04d-%02d-%02d", year, month, day) }
+    public var id: String { string }
     public var description: String { string }
 
     public func adding(days: Int) -> DayKey { DayKey(daysSinceEpoch: daysSinceEpoch + days) }
