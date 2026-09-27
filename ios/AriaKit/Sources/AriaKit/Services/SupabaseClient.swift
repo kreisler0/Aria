@@ -217,6 +217,61 @@ public final class SupabaseClient: @unchecked Sendable {
                            prefer: "return=minimal")
     }
 
+    // MARK: Synced OpenRouter key (user_secrets: one owner-only row per account)
+
+    /// The account's OpenRouter key, shared by all its devices; nil when none is saved.
+    public func fetchSyncedKey() async throws -> String? {
+        struct Row: Decodable { let openrouter_key: String? }
+        let rows: [Row] = try await get("user_secrets", query: [("select", "openrouter_key")])
+        return rows.first?.openrouter_key.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    public func saveSyncedKey(_ key: String) async throws {
+        guard let userId = await auth.currentUser?.id else { throw AriaError.notAuthenticated }
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw AriaError.invalidInput("The key can't be empty.") }
+        let body = try JSONEncoder().encode(["user_id": userId.lowercasedString, "openrouter_key": trimmed])
+        _ = try await send("POST", "user_secrets", query: [("on_conflict", "user_id")], body: body,
+                           prefer: "resolution=merge-duplicates,return=minimal")
+    }
+
+    public func clearSyncedKey() async throws {
+        guard let userId = await auth.currentUser?.id else { throw AriaError.notAuthenticated }
+        _ = try await send("DELETE", "user_secrets", query: [("user_id", "eq.\(userId.lowercasedString)")],
+                           prefer: "return=minimal")
+    }
+
+    // MARK: Devices
+
+    /// Adds this device to the account's list, or refreshes it.
+    public func registerDevice(deviceId: String, name: String, platform: DevicePlatform, now: Date = Date()) async throws {
+        guard let userId = await auth.currentUser?.id else { throw AriaError.notAuthenticated }
+        let body = try JSONEncoder().encode([
+            "user_id": userId.lowercasedString, "device_id": deviceId, "name": name,
+            "platform": platform.rawValue, "last_seen_at": AriaDate.formatUTC(now),
+        ])
+        _ = try await send("POST", "devices", query: [("on_conflict", "user_id,device_id")], body: body,
+                           prefer: "resolution=merge-duplicates,return=minimal")
+    }
+
+    /// Marks the device as seen. False when its row is gone: another device signed it out.
+    public func touchDevice(deviceId: String, now: Date = Date()) async throws -> Bool {
+        let body = try JSONEncoder().encode(["last_seen_at": AriaDate.formatUTC(now)])
+        let rows: [DeviceRecord] = try decode(try await send("PATCH", "devices", query: [("device_id", "eq.\(deviceId)")],
+                                                             body: body, prefer: "return=representation"))
+        return !rows.isEmpty
+    }
+
+    /// The account's devices, most recently seen first.
+    public func fetchDevices() async throws -> [DeviceRecord] {
+        try await get("devices", query: [("select", "*"), ("order", "last_seen_at.desc")])
+    }
+
+    /// Removes a device from the list; that device signs itself out when it next checks in.
+    public func removeDevice(deviceId: String) async throws {
+        _ = try await send("DELETE", "devices", query: [("device_id", "eq.\(deviceId)")], prefer: "return=minimal")
+    }
+
     // MARK: AI conversation log
 
     /// The most recent `limit` messages, oldest first.

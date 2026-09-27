@@ -91,6 +91,8 @@ final class AriaUITests: XCTestCase {
         ui.openTab("Settings")
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
         XCTAssertTrue(ui.showsText("Ada Lovelace"), "Settings shows the account")
+        XCTAssertTrue(ui.showsText("This device"), "Settings lists this device")
+        XCTAssertTrue(ui.reveal("Edge on Windows"), "…and the account's other devices")
         let signOut = app.buttons.matching(NSPredicate(format: "label == %@", "Sign Out"))
         let row = signOut.firstMatch
         let rowFrame = row.frame

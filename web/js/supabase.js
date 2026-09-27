@@ -335,6 +335,44 @@ export class SupabaseClient {
     return this.rest("DELETE", "ai_conversations", { user_id: `eq.${this.user.id}` }, undefined, "return=minimal");
   }
 
+  // The OpenRouter key, shared by every device on the account (user_secrets, owner-only).
+
+  async fetchSyncedKey() {
+    const rows = await this.rest("GET", "user_secrets", { select: "openrouter_key" });
+    return rows?.[0]?.openrouter_key || null;
+  }
+
+  saveSyncedKey(key) {
+    return this.rest("POST", "user_secrets", { on_conflict: "user_id" }, { user_id: this.user.id, openrouter_key: key },
+      "resolution=merge-duplicates,return=minimal");
+  }
+
+  clearSyncedKey() {
+    return this.rest("DELETE", "user_secrets", { user_id: `eq.${this.user.id}` }, undefined, "return=minimal");
+  }
+
+  // Devices signed in to the account.
+
+  registerDevice({ deviceId, name, platform }) {
+    return this.rest("POST", "devices", { on_conflict: "user_id,device_id" },
+      { user_id: this.user.id, device_id: deviceId, name, platform, last_seen_at: new Date().toISOString() },
+      "resolution=merge-duplicates,return=minimal");
+  }
+
+  /** Marks this device as seen. False when its row is gone: another device signed it out. */
+  async touchDevice(deviceId) {
+    const rows = await this.rest("PATCH", "devices", { device_id: `eq.${deviceId}` }, { last_seen_at: new Date().toISOString() }, "return=representation");
+    return (rows ?? []).length > 0;
+  }
+
+  fetchDevices() {
+    return this.rest("GET", "devices", { select: "*", order: "last_seen_at.desc" });
+  }
+
+  removeDevice(deviceId) {
+    return this.rest("DELETE", "devices", { device_id: `eq.${deviceId}` }, undefined, "return=minimal");
+  }
+
   // ---- Realtime
 
   /** Live changes to tasks, events and planner days; `onChange({table, type, id})`. Returns a stop function. */

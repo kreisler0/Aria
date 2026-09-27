@@ -2,6 +2,7 @@ import EventKit
 import Foundation
 import Observation
 import SwiftUI
+import UIKit
 import WidgetKit
 import AriaKit
 
@@ -50,6 +51,12 @@ final class AppModel {
     private(set) var selectedModel: String = ModelCatalog.defaultModel
     private(set) var availableModels: [OpenRouterModel] = ModelCatalog.curated
     private(set) var hasAPIKey = false
+    /// The key is saved to the account (so every device uses it), not just this device.
+    private(set) var keyIsSynced = false
+    /// Where this account is signed in; nil until loaded. Empty when the backend predates
+    /// the devices table (see `devicesSupported`).
+    private(set) var devices: [DeviceRecord]?
+    private(set) var devicesSupported = true
 
     private(set) var calendarSyncEnabled = false
     private(set) var calendarSyncStatus: String?
@@ -83,6 +90,17 @@ final class AppModel {
     @ObservationIgnored private var refreshDebounce: Task<Void, Never>?
     @ObservationIgnored private var syncDebounce: Task<Void, Never>?
     @ObservationIgnored private var calendarObserver: NSObjectProtocol?
+    @ObservationIgnored private var heartbeat: Task<Void, Never>?
+
+    /// A stable id for this install, so it's listed once among the account's devices.
+    let thisDeviceId: String = {
+        if UITestPreview.isEnabled { return "preview-this-device" }
+        let defaults = UserDefaults.standard
+        if let id = defaults.string(forKey: "aria.deviceId") { return id }
+        let id = UIDevice.current.identifierForVendor?.uuidString.lowercased() ?? UUID().uuidString.lowercased()
+        defaults.set(id, forKey: "aria.deviceId")
+        return id
+    }()
 
     var calendar: Calendar { .autoupdatingCurrent }
 
@@ -127,6 +145,12 @@ final class AppModel {
         tasks = sample.tasks
         events = sample.events
         chat = sample.chat
+        devices = [
+            DeviceRecord(deviceId: thisDeviceId, name: UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone",
+                         platform: "ios", lastSeenAt: Date()),
+            DeviceRecord(deviceId: "preview-windows-pc", name: "Edge on Windows", platform: "web",
+                         lastSeenAt: Date().addingTimeInterval(-3 * 3600)),
+        ]
         phase = .signedIn
         publish()
     }
@@ -139,6 +163,8 @@ final class AppModel {
             Task {
                 await refresh()
                 await syncCalendar()
+                await syncKey()
+                await checkIn()
             }
         case .background:
             realtime?.stop()
@@ -197,9 +223,17 @@ final class AppModel {
     }
 
     func signOut() async {
+        heartbeat?.cancel()
+        heartbeat = nil
         realtime?.stop()
         realtime = nil
+        if let client, phase == .signedIn { try? await client.removeDevice(deviceId: thisDeviceId) }
         await client?.auth.signOut()
+        // The key belongs to the account: don't leave it on a signed-out device.
+        try? keyStore.save(nil)
+        hasAPIKey = false
+        keyIsSynced = false
+        devices = nil
         user = nil
         tasks = []
         events = []
@@ -214,6 +248,8 @@ final class AppModel {
 
     private func didSignIn() async {
         startRealtime()
+        await syncKey()
+        await registerThisDevice()
         observeCalendarChanges()
         async let profile: Void = loadProfile()
         async let history: Void = loadChatHistory()
@@ -526,18 +562,128 @@ final class AppModel {
 
     // MARK: Settings
 
+    /// Saves the key in the Keychain and to the account, so all devices use it.
     func saveAPIKey(_ key: String) {
         do {
             try keyStore.save(key)
             hasAPIKey = keyStore.apiKey != nil
         } catch {
             errorMessage = "Couldn't save the key to the Keychain (\(error.localizedDescription))."
+            return
+        }
+        guard let client, let saved = keyStore.apiKey else { return }
+        Task {
+            do {
+                try await client.saveSyncedKey(saved)
+                keyIsSynced = true
+            } catch {
+                keyIsSynced = false
+                if !Self.isMissingTable(error) { handle(error) }
+            }
         }
     }
 
+    /// Removes the key from this device and from the account (so from every device).
     func removeAPIKey() {
         try? keyStore.save(nil)
         hasAPIKey = false
+        keyIsSynced = false
+        guard let client else { return }
+        Task {
+            do { try await client.clearSyncedKey() } catch { if !Self.isMissingTable(error) { handle(error) } }
+        }
+    }
+
+    /// Makes this device and the account agree on the key: the account's key wins; a key
+    /// only this device has (from before keys synced) is uploaded to the account.
+    func syncKey() async {
+        guard let client, phase == .signedIn else { return }
+        do {
+            if let remote = try await client.fetchSyncedKey() {
+                if remote != keyStore.apiKey { try keyStore.save(remote) }
+                keyIsSynced = true
+            } else if let local = keyStore.apiKey {
+                try await client.saveSyncedKey(local)
+                keyIsSynced = true
+            } else {
+                keyIsSynced = false
+            }
+        } catch {
+            // Offline or an older backend: keep using this device's copy.
+        }
+        hasAPIKey = keyStore.apiKey != nil
+    }
+
+    // MARK: Devices
+
+    private var thisDeviceName: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+    }
+
+    private func registerThisDevice() async {
+        guard let client else { return }
+        heartbeat?.cancel()
+        do {
+            try await client.registerDevice(deviceId: thisDeviceId, name: thisDeviceName,
+                                            platform: UIDevice.current.userInterfaceIdiom == .pad ? .ipados : .ios)
+            devicesSupported = true
+        } catch {
+            if Self.isMissingTable(error) { devicesSupported = false }
+            return
+        }
+        await loadDevices()
+        // Check in every minute while the app is open.
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                await self?.checkIn()
+            }
+        }
+    }
+
+    /// Marks this device as seen; if another device removed it from the list, sign out.
+    func checkIn() async {
+        guard let client, phase == .signedIn, devicesSupported,
+              UIApplication.shared.applicationState == .active else { return }
+        do {
+            if try await client.touchDevice(deviceId: thisDeviceId) == false {
+                await signOut()
+                errorMessage = "This device was signed out from another device."
+            }
+        } catch {
+            // Offline: try again next time.
+        }
+    }
+
+    func loadDevices() async {
+        guard let client, phase == .signedIn else { return }
+        do {
+            devices = try await client.fetchDevices()
+        } catch {
+            if Self.isMissingTable(error) { devicesSupported = false }
+        }
+    }
+
+    /// Signs another device out: it notices the next time it checks in.
+    func removeDevice(_ device: DeviceRecord) async {
+        guard let client else {
+            devices?.removeAll { $0.deviceId == device.deviceId } // UI-test preview
+            return
+        }
+        do {
+            try await client.removeDevice(deviceId: device.deviceId)
+            devices?.removeAll { $0.deviceId == device.deviceId }
+        } catch {
+            handle(error)
+        }
+    }
+
+    /// The backend predates the synced key / devices tables (the newer migration isn't applied).
+    private static func isMissingTable(_ error: Error) -> Bool {
+        if case .server(let status, let code, let message) = error as? AriaError {
+            return status == 404 || code == "PGRST205" || message.localizedCaseInsensitiveContains("could not find the table")
+        }
+        return false
     }
 
     func setModel(_ model: String) async {

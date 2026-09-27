@@ -38,7 +38,7 @@ const store = {
   },
 };
 
-const KEYS = { backend: "aria.backend", session: "aria.session", openrouter: "aria.openrouterKey", theme: "aria.theme", accent: "aria.accent" };
+const KEYS = { backend: "aria.backend", session: "aria.session", openrouter: "aria.openrouterKey", theme: "aria.theme", accent: "aria.accent", device: "aria.deviceId" };
 
 const ICONS = {
   today: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
@@ -52,6 +52,9 @@ const ICONS = {
   right: '<path d="M9 18l6-6-6-6"/>',
   ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   fail: '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>',
+  desktop: '<rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8 20h8M12 16v4"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.8"/><path d="M11 18.5h2"/>',
+  tablet: '<rect x="4.5" y="2.5" width="15" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const icon = (name, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ICONS[name]}</svg>`;
@@ -99,6 +102,8 @@ const state = {
   models: null,
   cal: { mode: "month", selected: dayKey(new Date()), month: dayKey(new Date()).slice(0, 8) + "01" },
   note: { key: null, text: "", loaded: false },
+  devices: null, // null = not loaded; false = the backend has no devices table yet
+  keySynced: null, // whether the account has a synced key (null = unknown)
 };
 let stopRealtime = null;
 let pollTimer = null;
@@ -176,6 +181,11 @@ function connect() {
 
 function signedOut(message) {
   state.started = false;
+  clearInterval(heartbeatTimer);
+  // The key belongs to the account: don't leave it behind in a signed-out browser.
+  store.set(KEYS.openrouter, null);
+  state.keySynced = null;
+  state.devices = null;
   stopRealtime?.();
   stopRealtime = null;
   clearInterval(pollTimer);
@@ -283,10 +293,100 @@ function renderLogin(message = "", mode = "signin", resendTo = "") {
 
 // ---- The app
 
+// ---- This device, and the account's OpenRouter key
+
+/** A stable id for this browser, so it appears once in the account's device list. */
+function deviceId() {
+  let id = store.get(KEYS.device);
+  if (!id) {
+    id = globalThis.crypto?.randomUUID?.() ?? `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+    store.set(KEYS.device, id);
+  }
+  return id;
+}
+
+/** "Chrome on Windows", "Safari on iPhone", "Aria (Home Screen) on iPhone"… */
+function deviceName() {
+  const ua = navigator.userAgent;
+  const os = /iPhone/.test(ua) ? "iPhone"
+    : /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? "iPad"
+    : /Android/.test(ua) ? "Android"
+    : /Windows/.test(ua) ? "Windows"
+    : /Mac OS X|Macintosh/.test(ua) ? "Mac"
+    : /CrOS/.test(ua) ? "ChromeOS"
+    : /Linux/.test(ua) ? "Linux" : "this device";
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const browser = standalone ? "Aria (Home Screen)"
+    : /Edg\//.test(ua) ? "Edge"
+    : /OPR\//.test(ua) ? "Opera"
+    : /Firefox\//.test(ua) ? "Firefox"
+    : /Chrome\//.test(ua) ? "Chrome"
+    : /Safari\//.test(ua) ? "Safari" : "Browser";
+  return `${browser} on ${os}`;
+}
+
+const missingTable = (error) => error?.status === 404 || /could not find the table|relation .* does not exist|PGRST205/i.test(error?.message ?? "");
+
+/** Makes this device and the account agree on the OpenRouter key: the account's key wins;
+ *  a key only this device has (from before keys synced) is uploaded to the account. */
+async function syncKey() {
+  try {
+    const remote = await state.client.fetchSyncedKey();
+    const local = openRouterKey();
+    if (remote) {
+      if (remote !== local) store.set(KEYS.openrouter, remote);
+      state.keySynced = true;
+    } else if (local) {
+      await state.client.saveSyncedKey(local);
+      state.keySynced = true;
+    } else {
+      state.keySynced = false;
+    }
+  } catch (error) {
+    state.keySynced = missingTable(error) ? "unsupported" : state.keySynced;
+  }
+}
+
+let heartbeatTimer = null;
+/** Registers this device, then checks in every minute while the app is open. If another
+ *  device removed it from the list, it signs out here. */
+async function startHeartbeat() {
+  clearInterval(heartbeatTimer);
+  try {
+    await state.client.registerDevice({ deviceId: deviceId(), name: deviceName(), platform: "web" });
+  } catch (error) {
+    if (missingTable(error)) state.devices = false;
+    return;
+  }
+  heartbeatTimer = setInterval(checkIn, 60_000);
+}
+
+async function checkIn() {
+  if (!state.started || document.visibilityState !== "visible" || state.devices === false) return;
+  try {
+    if (!(await state.client.touchDevice(deviceId()))) {
+      await state.client.signOut();
+      return signedOut("This device was signed out from another device.");
+    }
+    if (route() === "settings") await loadDevices();
+  } catch { /* offline: try again next time */ }
+}
+
+async function loadDevices() {
+  try {
+    state.devices = await state.client.fetchDevices();
+  } catch (error) {
+    state.devices = missingTable(error) ? false : state.devices ?? [];
+  }
+  if (route() === "settings") render();
+}
+
 function startApp() {
   state.started = true;
   renderShell();
   loadAll();
+  syncKey().then(() => state.started && render());
+  startHeartbeat().then(loadDevices);
   stopRealtime?.();
   stopRealtime = state.client.subscribe(onRemoteChange, (status) => {
     state.live = status;
@@ -351,7 +451,11 @@ function onRemoteChange(change) {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state.started) refresh();
+  if (document.visibilityState === "visible" && state.started) {
+    refresh();
+    syncKey().then(render);
+    checkIn();
+  }
 });
 
 function renderShell() {
@@ -795,6 +899,37 @@ async function ask(text) {
 
 // ---- Settings
 
+function devicesList() {
+  if (state.devices === null) return loading();
+  if (state.devices === false) {
+    return '<div class="empty">Your Supabase project needs the latest database update (supabase/migrations) to list devices.</div>';
+  }
+  const me = deviceId();
+  const now = Date.now();
+  const since = (date) => {
+    const minutes = Math.round((now - date) / 60_000);
+    if (minutes < 2) return null;
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} h ago`;
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  };
+  return `<ul class="list">${state.devices.map((d) => {
+    const seen = since(new Date(d.last_seen_at));
+    const current = d.device_id === me;
+    const kind = d.platform === "ios" ? "phone" : d.platform === "ipados" ? "tablet"
+      : d.platform === "web" && /iPhone|Android/.test(d.name) ? "phone"
+      : d.platform === "web" && /iPad/.test(d.name) ? "tablet" : "desktop";
+    const platform = { web: "Web", ios: "iPhone app", ipados: "iPad app", windows: "Windows app", macos: "Mac app", android: "Android app" }[d.platform] ?? d.platform;
+    return `<li class="row device">
+      <span class="device-icon">${icon(kind)}</span>
+      <div class="main"><div class="title">${esc(d.name)} ${current ? '<span class="pill ai">This device</span>' : ""}</div>
+        <div class="meta"><span class="presence ${current || !seen ? "online" : ""}"><i></i>${current || !seen ? "Online now" : `Last seen ${seen}`}</span><span>· ${esc(platform)}</span></div></div>
+      ${current ? "" : `<button class="icon-btn" data-action="remove-device" data-device="${esc(d.device_id)}" data-name="${esc(d.name)}" aria-label="Sign out ${esc(d.name)}" title="Sign out this device">${icon("trash")}</button>`}
+    </li>`;
+  }).join("")}</ul>`;
+}
+
 function viewSettings() {
   const user = state.client.user;
   const key = openRouterKey();
@@ -811,18 +946,23 @@ function viewSettings() {
       <div class="card">
         <div class="set-row"><span class="label">Name</span><span class="value">${esc(user.name || "—")}</span></div>
         <div class="set-row"><span class="label">Email</span><span class="value">${esc(user.email)}</span></div>
-        <div class="set-row"><span class="help">Signed in with the same account as your iPhone — changes sync both ways.</span><button class="btn danger" data-action="sign-out">Sign Out</button></div>
+        <div class="set-row"><span class="label">Sign out of this device</span><button class="btn danger" data-action="sign-out">Sign Out</button></div>
       </div>
+
+      <h2>Devices</h2>
+      <div class="card devices">${devicesList()}</div>
 
       <h2>Assistant</h2>
       <div class="card">
         <div class="set-row stack">
           <form id="key-form">
-            <label class="field" style="margin-bottom:8px">OpenRouter API key ${key ? '<span class="pill ai" style="margin-left:6px">Saved on this device</span>' : ""}
+            <label class="field" style="margin-bottom:8px">OpenRouter API key ${key ? `<span class="pill ai" style="margin-left:6px">${state.keySynced === true ? "Synced to your account" : "Saved on this device"}</span>` : ""}
               <input id="key-input" type="password" name="key" placeholder="${key ? "•••••••• (saved)" : "sk-or-v1-…"}" autocomplete="off" spellcheck="false"></label>
             <div class="hstack"><button class="btn primary" type="submit">Save key</button>${key ? '<button class="btn danger" type="button" data-action="remove-key">Remove</button>' : ""}</div>
           </form>
-          <p class="help" style="margin:10px 0 0">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. It stays in this browser only and is never sent to Supabase. Your iPhone keeps its own copy in the Keychain.</p>
+          <p class="help" style="margin:10px 0 0">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. ${state.keySynced === "unsupported"
+            ? "Saved on this device only: your Supabase project needs the latest database update (supabase/migrations) to share it across devices."
+            : "Saved to your account, so every device you sign in on uses the same key. It's private to your account in your Supabase project, and only ever sent to OpenRouter."}</p>
         </div>
         <div class="set-row stack">
           <label class="field" style="margin-bottom:8px">Model
@@ -1099,7 +1239,14 @@ document.addEventListener("submit", async (e) => {
     const value = form.key.value.trim();
     if (!value) return toast("Paste your OpenRouter key first.", "error");
     store.set(KEYS.openrouter, value);
-    toast("Key saved on this device");
+    try {
+      await state.client.saveSyncedKey(value);
+      state.keySynced = true;
+      toast("Key saved to your account — all your devices will use it");
+    } catch (error) {
+      state.keySynced = missingTable(error) ? "unsupported" : false;
+      toast(missingTable(error) ? "Key saved on this device" : "Saved on this device, but couldn't sync it — try again", missingTable(error) ? "" : "error");
+    }
     render();
   } else if (form.id === "custom-model-form") {
     e.preventDefault();
@@ -1186,12 +1333,30 @@ document.addEventListener("click", async (e) => {
       return;
     case "sign-out":
       if (!confirm("Sign out of Aria on this browser?")) return;
+      await state.client.removeDevice(deviceId()).catch(() => {});
       await state.client.signOut();
       return signedOut("");
     case "remove-key":
+      if (!confirm("Remove your OpenRouter key from your account? The assistant stops working on all your devices until you add one again.")) return;
+      try {
+        await state.client.clearSyncedKey();
+      } catch (error) {
+        if (!missingTable(error)) return fail(error);
+      }
       store.set(KEYS.openrouter, null);
-      toast("Key removed from this device");
+      state.keySynced = false;
+      toast("Key removed from your account");
       return render();
+    case "remove-device":
+      if (!confirm(`Sign out ${el.dataset.name}? It will be signed out the next time it checks in (within a minute while it's open).`)) return;
+      try {
+        await state.client.removeDevice(el.dataset.device);
+        await loadDevices();
+        toast(`${el.dataset.name} signed out`);
+      } catch (error) {
+        fail(error);
+      }
+      return;
     case "load-models":
       el.disabled = true;
       el.textContent = "Loading…";

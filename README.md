@@ -107,7 +107,7 @@ What's in the app:
 - **Tasks**: Overdue / Today / Tomorrow / Upcoming / No date / Completed, with swipe
   actions and an editor.
 - **Assistant**: chat with action chips for every change the AI made.
-- **Settings**: OpenRouter key (Keychain), model picker, calendar sync (which calendars,
+- **Settings**: OpenRouter key (synced to your account, cached in the Keychain), the account's devices (online status, sign a device out), model picker, calendar sync (which calendars,
   where new events go), Live Activity toggle, accent colour.
 - **iPad**: a sidebar split view. **iPhone**: tabs.
 - Glass materials (`.ultraThinMaterial` / `.regularMaterial`), `spring(response: 0.4,
@@ -190,7 +190,18 @@ There are three ways to run it:
    Cloudflare Pages, Vercel, or `python3 -m http.server -d web`).
 
 On first launch, paste your Supabase URL and anon key (Project Settings ▸ API), sign in
-with your iPhone account, then add your OpenRouter key in Settings. In Edge or Chrome you
+with your iPhone account, then add your OpenRouter key in Settings.
+
+**Synced key and devices.** The OpenRouter key is saved to the account (table
+`user_secrets`: one row per account, readable and writable only by its owner, never
+broadcast over Realtime), so every device you sign in on uses the same key. Each device
+also keeps a local copy (Keychain on iOS, `localStorage` on the web). Signing out removes
+the key from that device. Settings ▸ Devices lists where the account is signed in, with
+online status, and can sign another device out; that device signs itself out the next
+time it checks in (every minute while it's open). This needs the migration
+`supabase/migrations/20260927020000_synced_key_and_devices.sql`. On an existing project,
+paste it into Supabase ▸ SQL Editor and run it. Without it, the apps keep the key on each
+device and hide the device list. The Windows (WinUI) app keeps its key per device. In Edge or Chrome you
 can use ⋯ ▸ Apps ▸ *Install this site as an app* to get a taskbar icon and its own window.
 
 ## 4. Tests and CI

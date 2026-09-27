@@ -13,6 +13,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 accountSection
+                devicesSection
                 assistantSection
                 calendarSection
 
@@ -66,6 +67,7 @@ struct SettingsView: View {
             .background(AmbientBackground())
             .navigationTitle("Settings")
             .task {
+                await model.loadDevices()
                 await model.loadModels()
                 await model.loadCalendarOptions()
             }
@@ -85,11 +87,46 @@ struct SettingsView: View {
         }
     }
 
+    private var devicesSection: some View {
+        Section {
+            if !model.devicesSupported {
+                Text("Your Supabase project needs the latest database update (supabase/migrations) to list devices.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if let devices = model.devices {
+                ForEach(devices) { device in
+                    DeviceRow(device: device, isThisDevice: device.deviceId == model.thisDeviceId)
+                        .swipeActions {
+                            if device.deviceId != model.thisDeviceId {
+                                Button("Sign Out", role: .destructive) { Task { await model.removeDevice(device) } }
+                            }
+                        }
+                        .contextMenu {
+                            if device.deviceId != model.thisDeviceId {
+                                Button(role: .destructive) {
+                                    Task { await model.removeDevice(device) }
+                                } label: {
+                                    Label("Sign Out \(device.name)", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                            }
+                        }
+                }
+            } else {
+                ProgressView()
+            }
+        } header: {
+            Text("Devices")
+        } footer: {
+            Text("Swipe a device to sign it out. It signs out the next time it checks in.")
+        }
+    }
+
     private var assistantSection: some View {
         Section {
             if model.hasAPIKey {
                 LabeledContent("OpenRouter key") {
-                    Label("Saved in Keychain", systemImage: "lock.fill")
+                    Label(model.keyIsSynced ? "Synced to your account" : "Saved on this device",
+                          systemImage: model.keyIsSynced ? "checkmark.icloud.fill" : "lock.fill")
                         .foregroundStyle(.green)
                 }
                 Button("Remove Key", role: .destructive) { model.removeAPIKey() }
@@ -129,7 +166,7 @@ struct SettingsView: View {
         } header: {
             Text("Assistant")
         } footer: {
-            Text("Your key never leaves this device except to call OpenRouter. The model choice syncs to your other devices.")
+            Text("Your key and model are saved to your account, so every device you sign in on uses them. The key is private to your account and only ever sent to OpenRouter.")
         }
     }
 
@@ -189,6 +226,71 @@ struct SettingsView: View {
             Text("Calendar")
         } footer: {
             Text("Two-way sync with the Calendar app: events you or Aria create appear there, and events from the calendars you pick appear in Aria. When both sides change, the most recent edit wins.")
+        }
+    }
+}
+
+/// One of the account's devices: what it is, and whether it's online.
+private struct DeviceRow: View {
+    let device: DeviceRecord
+    let isThisDevice: Bool
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            let online = isThisDevice || device.isOnline(at: context.date)
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 40, height: 40)
+                    .liquidGlass(cornerRadius: 12, tint: .accentColor)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(device.name).font(.body.weight(.medium))
+                        if isThisDevice {
+                            Text("This device")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .foregroundStyle(.tint)
+                                .background(Color.accentColor.opacity(0.15), in: Capsule())
+                        }
+                    }
+                    HStack(spacing: 5) {
+                        Circle().fill(online ? Color.green : Color.secondary).frame(width: 7, height: 7)
+                        Text(online ? "Online now" : "Last seen \(device.lastSeenAt.formatted(.relative(presentation: .named)))")
+                            .foregroundStyle(online ? Color.green : Color.secondary)
+                        Text("· \(platformLabel)").foregroundStyle(.secondary)
+                    }
+                    .font(.caption)
+                }
+            }
+            .padding(.vertical, 2)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var symbol: String {
+        switch device.platform {
+        case "ios": return "iphone"
+        case "ipados": return "ipad"
+        case "macos": return "laptopcomputer"
+        default:
+            if device.name.contains("iPhone") || device.name.contains("Android") { return "iphone" }
+            if device.name.contains("iPad") { return "ipad" }
+            return "desktopcomputer"
+        }
+    }
+
+    private var platformLabel: String {
+        switch device.platform {
+        case "web": return "Web"
+        case "ios": return "iPhone app"
+        case "ipados": return "iPad app"
+        case "windows": return "Windows app"
+        case "macos": return "Mac app"
+        case "android": return "Android app"
+        default: return device.platform
         }
     }
 }

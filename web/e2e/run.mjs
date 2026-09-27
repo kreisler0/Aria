@@ -261,7 +261,7 @@ try {
     await page.getByRole("button", { name: "Add key" }).click();
     await page.getByLabel(/OpenRouter API key/).fill(OPENROUTER_KEY);
     await page.getByRole("button", { name: "Save key" }).click();
-    await page.getByText("Saved on this device", { exact: true }).waitFor();
+    await page.getByText("Synced to your account", { exact: true }).waitFor();
 
     await page.getByLabel("Model").selectOption("openai/gpt-4o");
     await page.locator("#toast").getByText("Model saved").waitFor();
@@ -359,17 +359,63 @@ try {
     await page.setViewportSize({ width: 1280, height: 860 });
   });
 
-  await step("the OpenRouter key never reached Supabase", async () => {
+  await step("the OpenRouter key goes to Supabase only as the account's private secret", async () => {
     assert.ok(supabaseTraffic.length > 10);
-    assert.equal(supabaseTraffic.filter((t) => t.includes(OPENROUTER_KEY)).length, 0);
+    const carrying = supabaseTraffic.filter((t) => t.includes(OPENROUTER_KEY));
+    assert.ok(carrying.length >= 1, "the key was saved to the account");
+    assert.deepEqual(carrying.filter((t) => !JSON.parse(t)[0].includes("/rest/v1/user_secrets")), [], "…and nowhere else");
+    const [secret] = await rest(token, "user_secrets?select=openrouter_key");
+    assert.equal(secret.openrouter_key, OPENROUTER_KEY);
+  });
+
+  await step("a second device gets the same key, lists both devices, and can sign the first out", async () => {
+    const other = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: "America/New_York", locale: "en-US" });
+    await other.addInitScript(([url, key]) => { window.ARIA_CONFIG = { supabaseUrl: url, supabaseAnonKey: key }; }, [SUPABASE_URL, ANON]);
+    const second = await other.newPage();
+    await second.goto(APP);
+    await second.getByLabel("Email").fill(email);
+    await second.getByLabel("Password").fill(password);
+    await second.locator("form button[type=submit]").click();
+    await second.locator("nav.sidebar").waitFor();
+    await second.locator("nav.sidebar").getByRole("button", { name: "Settings" }).click();
+    await second.getByText("Synced to your account", { exact: true }).waitFor();
+    assert.equal(await second.evaluate(() => localStorage.getItem("aria.openrouterKey")), OPENROUTER_KEY, "the key arrived without typing it");
+    await second.locator(".device").nth(1).waitFor();
+    assert.equal(await second.locator(".device").count(), 2);
+    assert.equal(await second.locator(".device").filter({ hasText: "This device" }).count(), 1);
+    await second.locator(".device").filter({ hasText: "This device" }).getByText("Online now").waitFor();
+
+    // Sign the first browser out from the second.
+    second.once("dialog", (d) => d.accept());
+    await second.getByRole("button", { name: /^Sign out / }).click();
+    await second.locator(".device").nth(1).waitFor({ state: "detached" });
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await page.getByText("This device was signed out from another device.").waitFor();
+    assert.equal(await page.evaluate(() => localStorage.getItem("aria.openrouterKey")), null, "the key doesn't stay behind");
+    await other.close();
+
+    // Signing back in brings the key back.
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.locator("form button[type=submit]").click();
+    await page.locator("nav.sidebar").waitFor();
+    await page.waitForFunction((k) => localStorage.getItem("aria.openrouterKey") === k, OPENROUTER_KEY);
+    await go("Settings");
+    await page.locator(".device").first().waitFor();
+    await shot("settings-devices");
   });
 
   await step("sign out", async () => {
     page.once("dialog", (d) => d.accept());
     await go("Settings");
-    await page.getByRole("button", { name: "Sign Out" }).click();
+    const thisDevice = await page.evaluate(() => localStorage.getItem("aria.deviceId"));
+    await page.getByRole("button", { name: "Sign Out", exact: true }).click();
     await page.getByText("Your planner, run by an assistant.").waitFor();
     assert.equal(await page.evaluate(() => localStorage.getItem("aria.session")), null);
+    assert.equal(await page.evaluate(() => localStorage.getItem("aria.openrouterKey")), null, "signing out clears the key");
+    const devices = await rest(token, "devices?select=device_id");
+    assert.ok(!devices.some((d) => d.device_id === thisDevice), "signing out removes this device from the list");
+    assert.equal(devices.length, 1, "the other browser is still listed");
   });
 
   await step("a baked-in backend skips setup and goes straight to sign-in", async () => {

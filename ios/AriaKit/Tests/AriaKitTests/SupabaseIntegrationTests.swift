@@ -134,6 +134,40 @@ final class SupabaseIntegrationTests: XCTestCase {
         XCTAssertNil(emptyDay)
     }
 
+    func testSyncedKeyAndDevicesArePrivatePerAccount() async throws {
+        let alice = try await makeUser("alice")
+        let bob = try await makeUser("bob")
+
+        let none = try await alice.fetchSyncedKey()
+        XCTAssertNil(none)
+        try await alice.saveSyncedKey("sk-or-v1-alice")
+        try await alice.saveSyncedKey(" sk-or-v1-alice-2 ")
+        let saved = try await alice.fetchSyncedKey()
+        XCTAssertEqual(saved, "sk-or-v1-alice-2", "saving again replaces the key")
+        let bobsView = try await bob.fetchSyncedKey()
+        XCTAssertNil(bobsView, "keys are private to their account")
+
+        try await alice.registerDevice(deviceId: "alice-iphone-0001", name: "Alice's iPhone", platform: .ios)
+        try await alice.registerDevice(deviceId: "alice-iphone-0001", name: "Alice's iPhone", platform: .ios)
+        try await alice.registerDevice(deviceId: "alice-browser-0001", name: "Safari on Mac", platform: .web)
+        let devices = try await alice.fetchDevices()
+        XCTAssertEqual(Set(devices.map(\.deviceId)), ["alice-iphone-0001", "alice-browser-0001"])
+        XCTAssertTrue(devices.allSatisfy { $0.isOnline() })
+        let bobsDevices = try await bob.fetchDevices()
+        XCTAssertTrue(bobsDevices.isEmpty, "devices are private to their account")
+        try await bob.removeDevice(deviceId: "alice-iphone-0001")
+
+        let stillThere = try await alice.touchDevice(deviceId: "alice-iphone-0001")
+        XCTAssertTrue(stillThere, "Bob can't sign Alice's devices out")
+        try await alice.removeDevice(deviceId: "alice-iphone-0001")
+        let afterRemoval = try await alice.touchDevice(deviceId: "alice-iphone-0001")
+        XCTAssertFalse(afterRemoval, "a removed device learns it was signed out")
+
+        try await alice.clearSyncedKey()
+        let cleared = try await alice.fetchSyncedKey()
+        XCTAssertNil(cleared)
+    }
+
     func testConversationLogRefreshAndSignOut() async throws {
         let alice = try await makeUser("alice")
         let start = Date()
