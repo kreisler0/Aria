@@ -617,3 +617,12 @@ button:disabled, .btn:disabled, [aria-disabled="true"] { cursor: var(--cursor-ar
 }
 .row.clickable:active::after, .cal-day:active::after, .week .col:active::after { transform: scale(0.97, 0.94); transition-duration: 0.12s; }
 .tabbar .nav-item::after, .nav-item[aria-current="page"]::after { display: none; }
+
+/* A card holding a single item: the item is the card, so its hover pill fills the whole
+   card (edge to edge, same corners) instead of floating inside it. */
+.card > .list:has(> .row:only-child) { padding: 0; }
+.card > .list > .row:only-child { padding: 18px 20px; margin: 0; border-radius: calc(var(--radius) - 1px); }
+.card > .list > .row.clickable:only-child:hover { transform: none; }
+.card > .list > .row.clickable:only-child::after { transform: scale(0.96, 0.9); }
+.card > .list > .row.clickable:only-child:hover::after { transform: scale(1); }
+.card > .list > .row.clickable:only-child:active::after { transform: scale(0.985, 0.96); }
