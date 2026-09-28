@@ -835,18 +835,55 @@ document.addEventListener("pointerup", (e) => {
   el.addEventListener("animationend", () => el.classList.remove("jelly"), { once: true });
 });
 
-// Stat cards tilt towards the pointer like a pane of glass.
+// Stat cards (and a card holding a single item) are lifted like a pane of glass and lean
+// gently towards the pointer. The motion is eased every frame, so it glides in, follows and
+// settles back without snapping between states.
+const PANES = ".stat, .card:has(> .list > .row.clickable:only-child)";
+const panes = new Map(); // element → { x, y, lift, tx, ty, tl }
+let paneFrame = 0;
+
+function paneAt(target) {
+  try { return target?.closest?.(PANES) ?? null; } catch { return target?.closest?.(".stat") ?? null; }
+}
+
 document.addEventListener("pointermove", (e) => {
-  const card = e.target.closest?.(".stat");
-  document.querySelectorAll(".stat.tilted").forEach((c) => c !== card && (c.classList.remove("tilted"), c.style.removeProperty("--rx"), c.style.removeProperty("--ry")));
-  if (!card || e.pointerType === "touch" || reduceMotion()) return;
-  const box = card.getBoundingClientRect();
-  const x = (e.clientX - box.left) / box.width - 0.5;
-  const y = (e.clientY - box.top) / box.height - 0.5;
-  card.classList.add("tilted");
-  card.style.setProperty("--rx", `${(-y * 10).toFixed(2)}deg`);
-  card.style.setProperty("--ry", `${(x * 12).toFixed(2)}deg`);
+  const card = e.pointerType === "touch" || reduceMotion() ? null : paneAt(e.target);
+  for (const [el, p] of panes) if (el !== card) p.tx = p.ty = p.tl = 0;
+  if (card) {
+    const box = card.getBoundingClientRect();
+    const p = panes.get(card) ?? { x: 0, y: 0, lift: 0 };
+    // Wide panes lean less, so their far edges never swing much.
+    p.tx = ((e.clientX - box.left) / box.width - 0.5) * Math.min(5, 1100 / box.width);
+    p.ty = -((e.clientY - box.top) / box.height - 0.5) * Math.min(4, 360 / box.height);
+    p.tl = 1;
+    panes.set(card, p);
+  }
+  if (panes.size && !paneFrame) paneFrame = requestAnimationFrame(stepPanes);
 }, { passive: true });
+
+document.documentElement.addEventListener("pointerleave", () => {
+  for (const p of panes.values()) p.tx = p.ty = p.tl = 0;
+  if (panes.size && !paneFrame) paneFrame = requestAnimationFrame(stepPanes);
+});
+
+function stepPanes() {
+  paneFrame = 0;
+  for (const [el, p] of panes) {
+    p.x += (p.tx - p.x) * 0.12;
+    p.y += (p.ty - p.y) * 0.12;
+    p.lift += (p.tl - p.lift) * 0.14;
+    const settled = Math.abs(p.tx - p.x) < 0.01 && Math.abs(p.ty - p.y) < 0.01 && Math.abs(p.tl - p.lift) < 0.002;
+    if (settled && p.tl === 0 || !el.isConnected) {
+      panes.delete(el);
+      el.style.removeProperty("--rx"); el.style.removeProperty("--ry"); el.style.removeProperty("--lift");
+      continue;
+    }
+    el.style.setProperty("--rx", `${p.y.toFixed(3)}deg`);
+    el.style.setProperty("--ry", `${p.x.toFixed(3)}deg`);
+    el.style.setProperty("--lift", p.lift.toFixed(4));
+  }
+  if (panes.size) paneFrame = requestAnimationFrame(stepPanes);
+}
 
 // Chromium can refract the backdrop through an SVG filter; others keep plain frosted glass.
 if (navigator.userAgentData?.brands?.some((b) => /Chromium/i.test(b.brand))) document.documentElement.classList.add("lg-refract");

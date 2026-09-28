@@ -97,7 +97,7 @@ body {
   letter-spacing: -0.006em;
 }
 button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
-button { cursor: pointer; }
+button { cursor: var(--cursor-link, pointer); }
 /* Selected text simply inverts: text colour behind, page colour in front. */
 ::selection { background: var(--text); color: var(--bg); }
 .bubble.user ::selection, .bubble.user::selection, .btn.primary ::selection, .check ::selection { background: #fff; color: var(--accent); }
@@ -246,7 +246,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
   animation: rowIn 0.7s var(--spring-soft) both; animation-delay: calc(var(--i, 0) * 35ms); }
 @keyframes rowIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
 .row + .row::before { content: ""; position: absolute; left: 50px; right: 14px; top: -1px; height: 1px; background: var(--glass-line); transition: opacity 0.2s; }
-.row.clickable { cursor: pointer; }
+.row.clickable { cursor: var(--cursor-link, pointer); }
 .row.clickable:hover { transform: translateY(-1px) scale(1.006); }
 .row.clickable:hover::before, .row.clickable:hover + .row::before { opacity: 0; }
 .row.clickable:active { transform: scale(0.985); transition-duration: 0.12s; }
@@ -281,8 +281,8 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .date-line { color: var(--muted); font-weight: 600; margin-bottom: 4px; letter-spacing: 0; }
 .greeting h1 { background: linear-gradient(120deg, var(--text) 40%, color-mix(in srgb, var(--accent) 80%, var(--text))); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 6px; }
-.stat { padding: 16px 18px; transition: transform 0.6s var(--spring), box-shadow 0.3s; animation-delay: calc(var(--i, 0) * 60ms); }
-.stat:hover { transform: translateY(-3px) scale(1.02); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), var(--glass-shadow-lg); }
+.stat { padding: 16px 18px; transition: box-shadow 0.4s var(--ease); animation-delay: calc(var(--i, 0) * 60ms); }
+.stat:hover { box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), var(--glass-shadow-lg); }
 .stat b { display: block; font-size: 30px; letter-spacing: -0.04em; font-weight: 750; line-height: 1.1; }
 .stat span { color: var(--muted); font-size: 13px; font-weight: 550; }
 
@@ -383,7 +383,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .cal-layout { display: grid; grid-template-columns: 1fr 350px; gap: 20px; align-items: start; }
 @media (max-width: 1040px) { .cal-layout { grid-template-columns: 1fr; } }
 .week { display: grid; grid-template-columns: repeat(7, 1fr); padding: 6px; gap: 4px; }
-.week .col { position: relative; min-height: 280px; padding: 8px 6px; display: flex; flex-direction: column; gap: 6px; min-width: 0; cursor: pointer; border-radius: 16px; transition: background 0.25s, transform 0.55s var(--spring); }
+.week .col { position: relative; min-height: 280px; padding: 8px 6px; display: flex; flex-direction: column; gap: 6px; min-width: 0; border-radius: 16px; transition: background 0.25s, transform 0.55s var(--spring); }
 .week .col[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent); }
 .week .col-head { text-align: center; font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
 .week .col-head b { display: block; font-size: 22px; letter-spacing: -0.03em; color: var(--text); text-transform: none; }
@@ -417,7 +417,7 @@ input:disabled, textarea:disabled { opacity: 0.6; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; font-weight: 600; }
 /* iOS switch: the knob stretches while pressed and springs across. */
-.switch { appearance: none; width: 51px; height: 31px; border-radius: 99px; background: color-mix(in srgb, var(--text) 14%, transparent); position: relative; cursor: pointer; flex: none; margin: 0;
+.switch { appearance: none; width: 51px; height: 31px; border-radius: 99px; background: color-mix(in srgb, var(--text) 14%, transparent); position: relative; flex: none; margin: 0;
   box-shadow: inset 0 0 0 1px var(--glass-line); transition: background 0.35s var(--ease); }
 .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 99px; background: #fff;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18), 0 1px 1px rgba(0, 0, 0, 0.12); transition: transform 0.55s var(--spring), width 0.3s var(--spring); }
@@ -534,8 +534,14 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card::after { background-image: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.09) 48%, transparent 62%); } }
 
 /* ---- Stat cards tilt like panes of glass */
-.stat { transform-style: preserve-3d; }
-.stat.tilted { transform: perspective(700px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-4px) scale(1.02); transition: transform 0.12s linear, box-shadow 0.3s; }
+/* Lifted panes: the pointer script eases --rx, --ry and --lift every frame (no CSS
+   transition on transform, which would fight it and judder). */
+.stat, .card:has(> .list > .row.clickable:only-child) {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
+    translateY(calc(var(--lift, 0) * -3px)) scale(calc(1 + var(--lift, 0) * 0.012));
+}
+.card:has(> .list > .row.clickable:only-child) { transition: box-shadow 0.4s var(--ease); }
+.card:has(> .list > .row.clickable:only-child:hover) { box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), var(--glass-shadow-lg); }
 
 /* ---- Assistant: a glass window with a living orb */
 .assistant-panel { display: flex; flex-direction: column; height: max(420px, calc(100dvh - 190px)); padding: 0; border-radius: 30px; overflow: hidden; }
@@ -608,12 +614,12 @@ button:disabled, .btn:disabled, [aria-disabled="true"] { cursor: var(--cursor-ar
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: var(--glass-hover);
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), 0 10px 24px -14px rgba(30, 30, 70, 0.35);
-  opacity: 0; transform: scale(0.9, 0.82);
-  transition: opacity 0.5s var(--ease), transform 0.75s var(--spring);
+  opacity: 0; transform: scale(0.96, 0.9);
+  transition: opacity 0.45s var(--ease), transform 0.7s var(--spring-soft);
 }
 .row.clickable:hover::after, .nav-item:hover::after, .cal-day:hover::after, .week .col:hover::after {
   opacity: 1; transform: scale(1);
-  transition: opacity 0.28s var(--ease), transform 0.6s var(--spring);
+  transition: opacity 0.3s var(--ease), transform 0.6s var(--spring-soft);
 }
 .row.clickable:active::after, .cal-day:active::after, .week .col:active::after { transform: scale(0.97, 0.94); transition-duration: 0.12s; }
 .tabbar .nav-item::after, .nav-item[aria-current="page"]::after { display: none; }
@@ -622,7 +628,7 @@ button:disabled, .btn:disabled, [aria-disabled="true"] { cursor: var(--cursor-ar
    card (edge to edge, same corners) instead of floating inside it. */
 .card > .list:has(> .row:only-child) { padding: 0; }
 .card > .list > .row:only-child { padding: 18px 20px; margin: 0; border-radius: calc(var(--radius) - 1px); }
-.card > .list > .row.clickable:only-child:hover { transform: none; }
-.card > .list > .row.clickable:only-child::after { transform: scale(0.96, 0.9); }
-.card > .list > .row.clickable:only-child:hover::after { transform: scale(1); }
-.card > .list > .row.clickable:only-child:active::after { transform: scale(0.985, 0.96); }
+.card > .list > .row.clickable:only-child:hover, .card > .list > .row.clickable:only-child:active { transform: none; }
+.card > .list > .row.clickable:only-child::after,
+.card > .list > .row.clickable:only-child:hover::after,
+.card > .list > .row.clickable:only-child:active::after { transform: none; }
