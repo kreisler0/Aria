@@ -5,7 +5,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 
 const root = new URL("./", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
-const ORDER = ["dates", "tools", "planner", "executor", "attachments", "assistant", "openrouter", "supabase", "markdown", "app"];
+const ORDER = ["dates", "tools", "planner", "executor", "attachments", "assistant", "openrouter", "supabase", "markdown", "logo", "app"];
 
 // Each module becomes a function scope that returns its exports; imports become destructuring.
 const modules = [];

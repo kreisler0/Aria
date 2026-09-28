@@ -4,6 +4,7 @@ import { ChatClient, PROVIDERS, GROQ_MODELS, groqReadsImages, providerOf } from 
 import { ToolExecutor } from "./executor.js";
 import { AssistantEngine, bubbles, contextMessages, logEntries } from "./assistant.js";
 import { markdown } from "./markdown.js";
+import { logoSvg } from "./logo.js";
 import { ACCEPT, MAX_FILES, adaptForGroq, readAttachment, sizeLabel, transcribeImage } from "./attachments.js";
 import { PRIORITY_LABELS, eventsOn, greeting, isOverdue, snapshotForPrompt, taskGroups, tasksDueOn, upcoming } from "./planner.js";
 import {
@@ -120,6 +121,9 @@ let pollTimer = null;
 
 /** Put the cursor in a field automatically only with a mouse or trackpad: on phones it pops
  *  the keyboard up uninvited (and older iOS zooms the page in). */
+/** Aria's glass mark, its glow in the chosen accent colour. */
+const logo = (cls) => logoSvg({ a: "var(--accent)", b: "var(--accent-2)", attrs: ` class="${cls}" aria-hidden="true"` });
+
 const canAutofocus = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
 
 /** On the Assistant screen the Ask box is ready to type in — on computers and iPads; a
@@ -255,7 +259,7 @@ function renderSetup(error = "", typed = null) {
   const saved = typed ?? store.json(KEYS.backend) ?? {};
   $("#app").innerHTML = `
     <div class="welcome"><form class="card" id="setup-form" novalidate>
-      <img class="logo" src="icon.svg" alt="">
+      ${logo("logo")}
       <h1>Connect your backend</h1>
       <p class="subtitle">Aria keeps your planner in your own Supabase project — the same one your iPhone uses.</p>
       ${error ? `<p class="error-text" role="alert">${esc(error)}</p>` : ""}
@@ -291,7 +295,7 @@ function renderLogin(message = "", mode = "signin", resendTo = "") {
   const creating = mode === "signup";
   $("#app").innerHTML = `
     <div class="welcome"><form class="card" id="login-form" novalidate>
-      <img class="logo" src="icon.svg" alt="">
+      ${logo("logo")}
       <h1>Aria</h1>
       <p class="subtitle">Your planner, run by an assistant.</p>
       <div class="seg tabs" role="group" aria-label="Account">
@@ -603,7 +607,7 @@ function renderShell() {
   $("#app").innerHTML = `
     <div class="shell">
       <nav class="sidebar" aria-label="Aria">
-        <div class="brand"><img src="icon.svg" alt="">Aria</div>
+        <div class="brand">${logo("brand-mark")}Aria</div>
         <div class="nav" data-liquid="sidebar">${nav()}</div>
         <div class="spacer"></div>
         <div class="sync" id="sync"><i></i><span></span></div>
