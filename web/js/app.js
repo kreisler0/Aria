@@ -135,6 +135,31 @@ function applyAppearance() {
   const accent = ACCENTS.find(([name]) => name === store.get(KEYS.accent)) ?? ACCENTS[0];
   document.documentElement.style.setProperty("--accent", accent[1]);
   document.documentElement.style.setProperty("--accent-2", accent[2]);
+  applyCursors(accent[1]);
+}
+
+// ---- Cursor: a slim macOS-style arrow (native, so it never lags), in the accent colour
+// over things you can click. Drawn as SVG at 1× and 2× so it's sharp on every screen.
+
+function cursorImage(fill, scale) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${22 * scale}" height="${22 * scale}" viewBox="0 0 22 22">` +
+    '<filter id="s" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy=".7" stdDeviation=".75" flood-opacity=".38"/></filter>' +
+    `<path d="M3.8 2.6v14.1l3.5-3.4 2.3 5.3 2.6-1.1-2.3-5.2h4.9z" fill="${fill}" stroke="#fff" stroke-width="1.3" stroke-linejoin="round" filter="url(#s)"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+function cursorValue(fill, fallback) {
+  const sharp = `image-set(${cursorImage(fill, 1)} 1x, ${cursorImage(fill, 2)} 2x) 4 3, ${fallback}`;
+  if (CSS.supports("cursor", sharp)) return sharp;
+  const webkit = sharp.replace("image-set(", "-webkit-image-set(");
+  if (CSS.supports("cursor", webkit)) return webkit;
+  return `${cursorImage(fill, 1)} 4 3, ${fallback}`;
+}
+
+function applyCursors(accent) {
+  const root = document.documentElement.style;
+  root.setProperty("--cursor-arrow", cursorValue("#111", "default"));
+  root.setProperty("--cursor-link", cursorValue(accent, "pointer"));
 }
 
 // ---- Toast
@@ -744,7 +769,6 @@ function patchAssistant(view, html) {
   }
   if (grew && (atBottom || state.followChat)) chat.scrollTo({ top: chat.scrollHeight, behavior: reduceMotion() ? "auto" : "smooth" });
   state.followChat = false;
-  litElements = null;
   updateLiquids();
   return true;
 }
@@ -758,9 +782,7 @@ function decorate(view) {
     view.querySelectorAll(".row").forEach((row, i) => row.style.setProperty("--i", Math.min(i, 14)));
     view.querySelectorAll(".stat, .card").forEach((card, i) => card.style.setProperty("--i", i));
   }
-  litElements = null;
   updateLiquids();
-  wakeLight();
 }
 
 /** One glass pill per group (sidebar, tab bar, segmented controls) that slides — stretching
@@ -800,73 +822,6 @@ addEventListener("resize", () => updateLiquids(false));
 // Segmented buttons outside the re-rendered view (sheets, sign-in) change on click.
 document.addEventListener("click", () => requestAnimationFrame(() => updateLiquids()));
 
-/** One light for the whole window. It glides after the pointer, and every glass surface is
- *  lit from that same point, so the glow sweeps across neighbouring panels together and
- *  fades everywhere when the pointer leaves the window, instead of each panel keeping its
- *  own frozen highlight. */
-const light = { x: -999, y: -999, tx: -999, ty: -999, level: 0, target: 0, frame: 0 };
-function moveLight(e) {
-  if (e.pointerType === "touch") return;
-  if (light.target === 0 && light.level < 0.05) {
-    // Appear where the pointer is rather than sliding in from the old spot.
-    light.x = e.clientX;
-    light.y = e.clientY;
-  }
-  light.tx = e.clientX;
-  light.ty = e.clientY;
-  light.target = 1;
-  wakeLight();
-}
-function wakeLight() {
-  light.frame ||= requestAnimationFrame(stepLight);
-}
-/** Glass panels the light can reach (rebuilt after each render); rows join only while hovered. */
-let litElements = null;
-const LIT_PANELS = ".card, .btn, .ai-bar form, .sidebar, .tabbar-inner, .suggestions button, .sheet, .glass, .seg";
-
-function stepLight() {
-  light.frame = 0;
-  const glide = reduceMotion() ? 1 : 0.2;
-  light.x += (light.tx - light.x) * glide;
-  light.y += (light.ty - light.y) * glide;
-  light.level += (light.target - light.level) * (reduceMotion() ? 1 : 0.12);
-  const level = light.level < 0.01 ? 0 : light.level;
-  const els = (litElements ??= [...document.querySelectorAll(LIT_PANELS)]).filter((el) => el.isConnected);
-  const hovered = document.querySelector(".row.clickable:hover");
-  if (hovered) els.push(hovered);
-  // All reads first, then all writes: interleaving them would force a layout per element.
-  const boxes = els.map((el) => el.getBoundingClientRect());
-  els.forEach((el, i) => {
-    const box = boxes[i];
-    const dx = Math.max(box.left - light.x, 0, light.x - box.right);
-    const dy = Math.max(box.top - light.y, 0, light.y - box.bottom);
-    // Only panels near the light are touched; the rest are switched off once and left alone.
-    if (level && dx * dx + dy * dy < 600 * 600) {
-      el.style.setProperty("--mx", `${Math.round(light.x - box.left)}px`);
-      el.style.setProperty("--my", `${Math.round(light.y - box.top)}px`);
-      el.style.setProperty("--light", level.toFixed(2));
-      el.dataset.lit = "1";
-    } else if (el.dataset.lit) {
-      el.style.setProperty("--light", "0");
-      delete el.dataset.lit;
-    }
-  });
-  const settled = Math.abs(light.tx - light.x) < 0.5 && Math.abs(light.ty - light.y) < 0.5 && Math.abs(light.target - light.level) < 0.01;
-  if (!settled) wakeLight();
-}
-document.addEventListener("pointermove", moveLight, { passive: true });
-document.addEventListener("pointerdown", moveLight, { passive: true });
-// The pointer left the window: dim the light everywhere.
-document.addEventListener("pointerout", (e) => {
-  if (!e.relatedTarget) {
-    light.target = 0;
-    wakeLight();
-  }
-});
-addEventListener("blur", () => {
-  light.target = 0;
-  wakeLight();
-});
 // Jelly: whatever you press squishes, then wobbles back like liquid.
 const JELLY = ".btn, .icon-btn, .nav-item, .seg button, .suggestions button, .swatch, .ai-bar .send, .cal-day, .week .item, .chip, .model-chip";
 document.addEventListener("pointerup", (e) => {
@@ -890,9 +845,6 @@ document.addEventListener("pointermove", (e) => {
   card.style.setProperty("--rx", `${(-y * 10).toFixed(2)}deg`);
   card.style.setProperty("--ry", `${(x * 12).toFixed(2)}deg`);
 }, { passive: true });
-
-// Panels move (scrolling, re-renders): keep them lit from the same point.
-addEventListener("scroll", wakeLight, { passive: true });
 
 // Chromium can refract the backdrop through an SVG filter; others keep plain frosted glass.
 if (navigator.userAgentData?.brands?.some((b) => /Chromium/i.test(b.brand))) document.documentElement.classList.add("lg-refract");
