@@ -17,6 +17,7 @@ export interface Env {
   encryptionKey: string;
   caldavRoot?: string;        // tests point this at a fake CalDAV server
   publicFunctionUrl?: string; // where pg_cron should call; defaults to the Supabase URL
+  pageSize?: number;          // tests use small pages to exercise paging
 }
 
 const CORS = {
@@ -44,6 +45,7 @@ export function pickDefault(calendars: CalendarInfo[]): string | null {
 
 export function createHandler(env: Env, fetchImpl: typeof fetch = fetch) {
   const db = new Db(env.supabaseUrl, env.serviceKey, fetchImpl);
+  if (env.pageSize) db.pageSize = env.pageSize;
 
   async function loadAccount(userId: string): Promise<Account | null> {
     const [row] = await db.select<Account>("calendar_accounts", { user_id: `eq.${userId}`, select: ACCOUNT_COLUMNS });
@@ -101,7 +103,7 @@ export function createHandler(env: Env, fetchImpl: typeof fetch = fetch) {
   }
 
   async function disconnect(userId: string) {
-    const links = await db.select<{ event_id: string; origin: string }>("calendar_links", { user_id: `eq.${userId}`, select: "event_id,origin" });
+    const links = await db.selectAll<{ event_id: string; origin: string }>("calendar_links", { user_id: `eq.${userId}`, select: "event_id,origin" }, "event_id.asc");
     const copies = links.filter((l) => l.origin === "remote").map((l) => l.event_id);
     await db.remove("calendar_links", { user_id: `eq.${userId}` });
     for (let i = 0; i < copies.length; i += 80) {

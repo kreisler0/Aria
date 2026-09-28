@@ -15,6 +15,8 @@ import { DAY } from "./time.ts";
 
 export const WINDOW_BACK = 90 * DAY;
 export const WINDOW_AHEAD = 400 * DAY;
+export const REPEAT_BACK = 30 * DAY;
+export const REPEAT_AHEAD = 183 * DAY;
 
 export interface Account {
   user_id: string;
@@ -82,6 +84,13 @@ function sameContent(row: EventRow, e: CalEvent): boolean {
     ms(row.end_at) === e.end && row.all_day === e.allDay;
 }
 
+/** What an event looks like on screen: two with the same signature are duplicates. */
+function signature(e: { title: string; start?: number; end?: number; start_at?: string; end_at?: string; allDay?: boolean; all_day?: boolean }): string {
+  const start = e.start ?? ms(e.start_at!);
+  const end = e.end ?? ms(e.end_at!);
+  return `${e.title}|${start}|${end}|${e.allDay ?? e.all_day}`;
+}
+
 function eventFields(e: CalEvent) {
   return { title: e.title.slice(0, 500) || "(No title)", notes: e.notes, start_at: toIso(e.start), end_at: toIso(e.end), all_day: e.allDay };
 }
@@ -105,6 +114,9 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
   const user = account.user_id;
   const windowStart = now - WINDOW_BACK;
   const windowEnd = now + WINDOW_AHEAD;
+  // Repeating events become one Aria event per occurrence, so they get a narrower window.
+  const repeatStart = now - REPEAT_BACK;
+  const repeatEnd = now + REPEAT_AHEAD;
   const calendars = new Map(account.calendars.map((c) => [c.url, c]));
   const selected = new Set(account.selected.filter((url) => calendars.has(url)));
   const defaultCal = account.default_calendar && calendars.has(account.default_calendar) && !calendars.get(account.default_calendar)!.readOnly
@@ -112,15 +124,15 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
   if (defaultCal) selected.add(defaultCal);
 
   // 1. Deletions made in Aria.
-  const tombstones = await db.select<{ id: number; calendar_url: string; href: string; etag: string | null }>(
-    "calendar_deletions", { user_id: `eq.${user}`, select: "id,calendar_url,href,etag" });
+  const tombstones = await db.selectAll<{ id: number; calendar_url: string; href: string; etag: string | null }>(
+    "calendar_deletions", { user_id: `eq.${user}`, select: "id,calendar_url,href,etag" }, "id.asc");
   for (const t of tombstones) {
     if (calendars.has(t.calendar_url) && !calendars.get(t.calendar_url)!.readOnly) {
       const result = await dav.deleteEvent(t.href, t.etag);
       if (result === "deleted") summary.deletedInICloud++;
     }
-    await db.remove("calendar_deletions", { id: `eq.${t.id}` });
   }
+  for (const ids of chunks(tombstones.map((t) => t.id))) await db.remove("calendar_deletions", { id: `in.(${ids.join(",")})` });
 
   // 2. iCloud's side.
   const remote = new Map<string, Remote>();
@@ -128,6 +140,7 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
     const cal = calendars.get(url)!;
     for (const item of await dav.fetchEvents(url, windowStart, windowEnd)) {
       for (const event of eventsFromICS(item.ics, windowStart, windowEnd)) {
+        if (event.recurring && (event.end <= repeatStart || event.start >= repeatEnd)) continue;
         remote.set(`${item.href}|${event.occurrence}`, {
           calendarUrl: url, href: item.href, etag: item.etag, ics: item.ics, event, readOnly: cal.readOnly || event.recurring,
         });
@@ -135,22 +148,25 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
     }
   }
 
-  // Aria's side: linked events, and everything in the window.
-  const links = await db.select<LinkRow>("calendar_links", { user_id: `eq.${user}`, select: "*" });
+  // Aria's side: every link, the linked events, and every event in the window — all pages.
+  const links = await db.selectAll<LinkRow>("calendar_links", { user_id: `eq.${user}`, select: "*" }, "event_id.asc");
   const events = new Map<string, EventRow>();
   const eventColumns = "id,user_id,title,notes,start_at,end_at,all_day,ios_calendar_event_id,updated_at";
   for (const ids of chunks(links.map((l) => l.event_id))) {
     for (const row of await db.select<EventRow>("events", { select: eventColumns, id: `in.(${ids.join(",")})` })) events.set(row.id, row);
   }
-  const windowRows = await db.select<EventRow>("events", {
+  const windowRows = await db.selectAll<EventRow>("events", {
     select: eventColumns, user_id: `eq.${user}`, start_at: `lt.${toIso(windowEnd)}`, end_at: `gte.${toIso(windowStart)}`,
-  });
+  }, "id.asc");
   for (const row of windowRows) events.set(row.id, row);
 
-  const unlink = (eventId: string) => db.remove("calendar_links", { event_id: `eq.${eventId}` });
-  const deleteMirror = async (eventId: string) => {
-    await unlink(eventId); // first, so no tombstone sends the deletion back to iCloud
-    await db.remove("events", { id: `eq.${eventId}`, user_id: `eq.${user}` });
+  // Removals are collected and done in batches at the end (links first, so no tombstone
+  // sends a deletion back to iCloud).
+  const unlinkIds = new Set<string>();
+  const deleteIds = new Set<string>();
+  const deleteMirror = (eventId: string) => {
+    unlinkIds.add(eventId);
+    deleteIds.add(eventId);
     summary.deletedInAria++;
   };
   const applyRemote = async (row: EventRow, r: Remote) => {
@@ -160,41 +176,46 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
       if (saved) updatedAt = saved.updated_at;
       summary.updatedInAria++;
     }
-    await db.update("calendar_links", { event_id: `eq.${row.id}` }, { etag: r.etag, synced_at: updatedAt, read_only: r.readOnly });
+    if (r.etag !== undefined) await db.update("calendar_links", { event_id: `eq.${row.id}` }, { etag: r.etag, synced_at: updatedAt, read_only: r.readOnly });
   };
 
   // 3. Linked events.
   const linkedIds = new Set<string>();
+  const linkedKeys = new Set<string>();
+  const shown = new Set<string>(); // content of every iCloud event that has its Aria copy
   for (const link of links) {
-    linkedIds.add(link.event_id);
+    const key = `${link.href}|${link.occurrence}`;
     const row = events.get(link.event_id);
-    if (!row) {
-      await unlink(link.event_id);
+    if (!row || linkedKeys.has(key)) {
+      // A link to a deleted event, or a second link to the same iCloud event (left by an
+      // interrupted sync): drop it; a duplicate event is removed below as a copy.
+      unlinkIds.add(link.event_id);
       continue;
     }
+    linkedIds.add(link.event_id);
+    linkedKeys.add(key);
     if (!selected.has(link.calendar_url)) {
       // The calendar was switched off or removed: drop its copies, keep Aria's own events.
-      if (link.origin === "remote") await deleteMirror(row.id);
-      else await unlink(row.id);
+      if (link.origin === "remote") deleteMirror(row.id);
+      else unlinkIds.add(row.id);
       continue;
     }
-    const key = `${link.href}|${link.occurrence}`;
     const r = remote.get(key);
     remote.delete(key);
     if (!r) {
       if (link.occurrence) {
-        // An occurrence that no longer exists (the series changed or was trimmed).
-        const start = Date.parse(link.occurrence);
-        if (start >= windowStart && start < windowEnd) await deleteMirror(row.id);
+        // An occurrence that no longer exists, or has moved out of the window.
+        deleteMirror(row.id);
         continue;
       }
       // Missing from the window: deleted, or moved far away. Old events that simply aged
       // out of the window are left alone; otherwise ask iCloud directly.
       if (ms(row.end_at) < windowStart || ms(row.start_at) > windowEnd) continue;
       const item = await dav.getEvent(link.href);
-      if (!item) await deleteMirror(row.id);
+      if (!item) deleteMirror(row.id);
       continue;
     }
+    shown.add(signature(r.event));
     const remoteChanged = r.etag !== link.etag;
     const ariaChanged = ms(row.updated_at) > ms(link.synced_at) + 1000;
     if (link.read_only || r.readOnly || link.origin === "remote" && calendars.get(link.calendar_url)?.readOnly) {
@@ -219,28 +240,61 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
     }
   }
 
-  // 4a. New iCloud events → Aria (or link to an identical unlinked Aria event).
-  const unlinked = [...events.values()].filter((row) => !linkedIds.has(row.id) && row.user_id === user);
-  for (const r of remote.values()) {
+  // 4a. New iCloud events → Aria (or link to an identical unlinked Aria event), in batches.
+  const unlinked = [...events.values()].filter((row) => !linkedIds.has(row.id) && !deleteIds.has(row.id) && row.user_id === user);
+  const newEvents: Record<string, unknown>[] = [];
+  const newLinks: Record<string, unknown>[] = [];
+  for (const [key, r] of remote) {
+    if (linkedKeys.has(key)) continue;
+    linkedKeys.add(key);
+    shown.add(signature(r.event));
     const twin = unlinked.find((row) => sameContent(row, r.event));
-    let row = twin;
+    let eventId: string;
+    let origin: "aria" | "remote";
+    let syncedAt: string | null;
     if (twin) {
       unlinked.splice(unlinked.indexOf(twin), 1);
+      eventId = twin.id;
+      origin = "aria";
+      syncedAt = twin.updated_at;
     } else {
-      [row] = await db.insert<EventRow>("events", { user_id: user, source: "user", ...eventFields(r.event) });
-      summary.imported++;
+      eventId = crypto.randomUUID();
+      origin = "remote";
+      syncedAt = null; // filled from the inserted row
+      newEvents.push({ id: eventId, user_id: user, source: "user", ...eventFields(r.event) });
     }
-    if (!row) continue;
-    await db.insert("calendar_links", {
-      event_id: row.id, user_id: user, calendar_url: r.calendarUrl, href: r.href, uid: r.event.uid, occurrence: r.event.occurrence,
-      etag: r.etag, origin: twin ? "aria" : "remote", read_only: r.readOnly, synced_at: row.updated_at,
-    }, { on_conflict: "event_id" }, "resolution=merge-duplicates,return=minimal");
+    newLinks.push({
+      event_id: eventId, user_id: user, calendar_url: r.calendarUrl, href: r.href, uid: r.event.uid, occurrence: r.event.occurrence,
+      etag: r.etag, origin, read_only: r.readOnly, synced_at: syncedAt,
+    });
+  }
+  const insertedAt = new Map<string, string>();
+  for (const batch of chunks(newEvents, 250)) {
+    for (const row of await db.insert<{ id: string; updated_at: string }>("events", batch, { select: "id,updated_at" })) insertedAt.set(row.id, row.updated_at);
+    summary.imported += batch.length;
+  }
+  for (const link of newLinks) link.synced_at ??= insertedAt.get(link.event_id as string) ?? new Date(now).toISOString();
+  for (const batch of chunks(newLinks, 250)) {
+    // A link that somehow already exists is skipped rather than failing the whole sync.
+    await db.insert("calendar_links", batch, { on_conflict: "user_id,href,occurrence" }, "resolution=ignore-duplicates,return=minimal");
+  }
+
+  // Copies of iCloud events that lost their link (an interrupted sync can leave them):
+  // identical to an event that's already shown, so they're removed, not pushed to iCloud.
+  const toPush: EventRow[] = [];
+  for (const row of unlinked) {
+    if (shown.has(signature(row))) {
+      deleteIds.add(row.id);
+      summary.deletedInAria++;
+    } else {
+      toPush.push(row);
+    }
   }
 
   // 4b. New Aria events → the default calendar. Events mirrored by the iPhone app's
   // Calendar sync are left alone so nothing is duplicated.
   if (defaultCal) {
-    for (const row of unlinked) {
+    for (const row of toPush) {
       if (row.ios_calendar_event_id) continue;
       const uid = `aria-${row.id}@aria.app`;
       const href = new URL(`${row.id}.ics`, defaultCal).toString();
@@ -253,6 +307,10 @@ export async function syncAccount(db: Db, dav: CalDAVClient, account: Account, n
       summary.pushed++;
     }
   }
+
+  // 5. Removals, in batches: links first, then the events.
+  for (const ids of chunks([...unlinkIds])) await db.remove("calendar_links", { event_id: `in.(${ids.join(",")})` });
+  for (const ids of chunks([...deleteIds])) await db.remove("events", { user_id: `eq.${user}`, id: `in.(${ids.join(",")})` });
   return summary;
 }
 

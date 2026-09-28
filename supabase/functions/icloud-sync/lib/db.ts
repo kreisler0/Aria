@@ -5,6 +5,8 @@ export class Db {
   private url: string;
   private key: string;
   private fetchImpl: typeof fetch;
+  /** Rows per page for selectAll (Supabase caps a response at 1000 rows by default). */
+  pageSize = 1000;
 
   constructor(supabaseUrl: string, serviceKey: string, fetchImpl: typeof fetch = fetch) {
     this.url = supabaseUrl.replace(/\/$/, "");
@@ -31,6 +33,20 @@ export class Db {
 
   select<T>(table: string, params: Record<string, string>): Promise<T[]> {
     return this.request<T[]>("GET", table, params);
+  }
+
+  /** Every matching row, page by page. A plain select silently stops at the server's row
+   *  cap (1000 on Supabase); `order` must make the order stable (e.g. the primary key). */
+  async selectAll<T>(table: string, params: Record<string, string>, order: string): Promise<T[]> {
+    const out: T[] = [];
+    for (let offset = 0; ; ) {
+      const page = await this.select<T>(table, { ...params, order, limit: String(this.pageSize), offset: String(offset) });
+      if (page.length === 0) break;
+      out.push(...page);
+      offset += page.length; // advance by what came back, in case the server caps pages lower
+      if (page.length < this.pageSize && this.pageSize <= 1000) break;
+    }
+    return out;
   }
 
   insert<T>(table: string, rows: unknown, params: Record<string, string> = {}, prefer = "return=representation"): Promise<T[]> {
