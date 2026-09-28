@@ -744,6 +744,7 @@ function patchAssistant(view, html) {
   }
   if (grew && (atBottom || state.followChat)) chat.scrollTo({ top: chat.scrollHeight, behavior: reduceMotion() ? "auto" : "smooth" });
   state.followChat = false;
+  litElements = null;
   updateLiquids();
   return true;
 }
@@ -757,6 +758,7 @@ function decorate(view) {
     view.querySelectorAll(".row").forEach((row, i) => row.style.setProperty("--i", Math.min(i, 14)));
     view.querySelectorAll(".stat, .card").forEach((card, i) => card.style.setProperty("--i", i));
   }
+  litElements = null;
   updateLiquids();
   wakeLight();
 }
@@ -802,7 +804,6 @@ document.addEventListener("click", () => requestAnimationFrame(() => updateLiqui
  *  lit from that same point, so the glow sweeps across neighbouring panels together and
  *  fades everywhere when the pointer leaves the window, instead of each panel keeping its
  *  own frozen highlight. */
-const LIT = ".card, .btn, .row, .ai-bar form, .sidebar, .tabbar-inner, .suggestions button, .sheet, .glass, .seg";
 const light = { x: -999, y: -999, tx: -999, ty: -999, level: 0, target: 0, frame: 0 };
 function moveLight(e) {
   if (e.pointerType === "touch") return;
@@ -819,18 +820,37 @@ function moveLight(e) {
 function wakeLight() {
   light.frame ||= requestAnimationFrame(stepLight);
 }
+/** Glass panels the light can reach (rebuilt after each render); rows join only while hovered. */
+let litElements = null;
+const LIT_PANELS = ".card, .btn, .ai-bar form, .sidebar, .tabbar-inner, .suggestions button, .sheet, .glass, .seg";
+
 function stepLight() {
   light.frame = 0;
   const glide = reduceMotion() ? 1 : 0.2;
   light.x += (light.tx - light.x) * glide;
   light.y += (light.ty - light.y) * glide;
   light.level += (light.target - light.level) * (reduceMotion() ? 1 : 0.12);
-  document.documentElement.style.setProperty("--light", light.level.toFixed(3));
-  for (const el of document.querySelectorAll(LIT)) {
-    const box = el.getBoundingClientRect();
-    el.style.setProperty("--mx", `${(light.x - box.left).toFixed(1)}px`);
-    el.style.setProperty("--my", `${(light.y - box.top).toFixed(1)}px`);
-  }
+  const level = light.level < 0.01 ? 0 : light.level;
+  const els = (litElements ??= [...document.querySelectorAll(LIT_PANELS)]).filter((el) => el.isConnected);
+  const hovered = document.querySelector(".row.clickable:hover");
+  if (hovered) els.push(hovered);
+  // All reads first, then all writes: interleaving them would force a layout per element.
+  const boxes = els.map((el) => el.getBoundingClientRect());
+  els.forEach((el, i) => {
+    const box = boxes[i];
+    const dx = Math.max(box.left - light.x, 0, light.x - box.right);
+    const dy = Math.max(box.top - light.y, 0, light.y - box.bottom);
+    // Only panels near the light are touched; the rest are switched off once and left alone.
+    if (level && dx * dx + dy * dy < 600 * 600) {
+      el.style.setProperty("--mx", `${Math.round(light.x - box.left)}px`);
+      el.style.setProperty("--my", `${Math.round(light.y - box.top)}px`);
+      el.style.setProperty("--light", level.toFixed(2));
+      el.dataset.lit = "1";
+    } else if (el.dataset.lit) {
+      el.style.setProperty("--light", "0");
+      delete el.dataset.lit;
+    }
+  });
   const settled = Math.abs(light.tx - light.x) < 0.5 && Math.abs(light.ty - light.y) < 0.5 && Math.abs(light.target - light.level) < 0.01;
   if (!settled) wakeLight();
 }

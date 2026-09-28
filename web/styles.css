@@ -29,8 +29,8 @@
   --glass-shadow: 0 1px 1px rgba(20, 20, 50, 0.04), 0 10px 30px -8px rgba(40, 40, 90, 0.18);
   --glass-shadow-lg: 0 2px 4px rgba(20, 20, 50, 0.05), 0 30px 70px -18px rgba(40, 40, 100, 0.35);
   --field: rgba(255, 255, 255, 0.55);
-  --blur: blur(22px) saturate(185%);
-  --blur-strong: blur(34px) saturate(200%);
+  --blur: blur(18px) saturate(170%);
+  --blur-strong: blur(26px) saturate(180%);
   --sheen: rgba(255, 255, 255, 0.75);
 
   --radius: 22px;
@@ -109,17 +109,17 @@ button { cursor: pointer; }
 :focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent-glow); }
 
 /* ---- The colour field behind the glass */
-.aurora { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--bg); }
-.aurora i { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.55; will-change: transform; }
-.aurora i:nth-child(1) { width: 55vmax; height: 55vmax; left: -12vmax; top: -18vmax; background: var(--accent); animation: drift1 26s ease-in-out infinite alternate; }
-.aurora i:nth-child(2) { width: 48vmax; height: 48vmax; right: -14vmax; top: 10vmax; background: var(--accent-2); animation: drift2 32s ease-in-out infinite alternate; }
-.aurora i:nth-child(3) { width: 40vmax; height: 40vmax; left: 20vmax; bottom: -22vmax; background: color-mix(in srgb, var(--accent) 50%, #ff8fb1); opacity: 0.38; animation: drift3 38s ease-in-out infinite alternate; }
-:root[data-theme="dark"] .aurora i { opacity: 0.32; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .aurora i { opacity: 0.32; } }
-.aurora::after { content: ""; position: absolute; inset: 0; background: radial-gradient(transparent 40%, color-mix(in srgb, var(--bg) 55%, transparent)); }
-@keyframes drift1 { to { transform: translate(14vmax, 10vmax) scale(1.15); } }
-@keyframes drift2 { to { transform: translate(-16vmax, 12vmax) scale(0.9); } }
-@keyframes drift3 { to { transform: translate(-10vmax, -14vmax) scale(1.2); } }
+/* A static field of soft colour (gradients, not blurred shapes): glass blurs what's behind
+   it, so a moving background would make every panel re-blur on every frame. */
+.aurora { position: fixed; inset: 0; z-index: -1; pointer-events: none; --glow: 52%;
+  background:
+    radial-gradient(60vmax 60vmax at 8% -6%, color-mix(in srgb, var(--accent) var(--glow), transparent), transparent 68%),
+    radial-gradient(52vmax 52vmax at 104% 42%, color-mix(in srgb, var(--accent-2) calc(var(--glow) - 6%), transparent), transparent 68%),
+    radial-gradient(44vmax 44vmax at 44% 112%, color-mix(in srgb, color-mix(in srgb, var(--accent) 50%, #ff8fb1) calc(var(--glow) - 18%), transparent), transparent 70%),
+    var(--bg); }
+.aurora i { display: none; }
+:root[data-theme="dark"] .aurora { --glow: 30%; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .aurora { --glow: 30%; } }
 
 /* ---- Glass material. Specular edge on top, a soft inner rim, and a highlight that follows the pointer. */
 .glass, .card, .sidebar, .tabbar, .ai-bar form, .sheet, .seg, .btn, .icon-btn, .welcome .card, #toast, .bubble.assistant, .suggestions button, .chip {
@@ -129,14 +129,16 @@ button { cursor: pointer; }
   background:
     radial-gradient(560px circle at var(--mx, -999px) var(--my, -999px), color-mix(in srgb, var(--sheen) calc(var(--light, 0) * 100%), transparent), transparent 55%) border-box,
     var(--glass);
-  -webkit-backdrop-filter: var(--blur);
-  backdrop-filter: var(--blur);
   border: 1px solid transparent;
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 -1px 0 var(--glass-edge-2), inset 0 0 0 1px var(--glass-line), var(--glass-shadow);
   border-radius: var(--radius);
 }
+/* Live blur only where content actually slides underneath (floating bars, sheets, toasts).
+   Cards and the sidebar sit on the static colour field, whose blurred image is the same
+   soft gradient, so they skip the per-frame blur and look the same. */
+.ai-bar form, .tabbar-inner, .glass { -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
 /* Chromium can bend what's behind the glass (see the #liquid-refraction SVG filter). */
-.lg-refract .ai-bar form, .lg-refract .tabbar-inner, .lg-refract .sheet {
+.lg-refract .sheet {
   -webkit-backdrop-filter: blur(3px) url(#liquid-refraction) blur(16px) saturate(190%);
   backdrop-filter: blur(3px) url(#liquid-refraction) blur(16px) saturate(190%);
 }
@@ -172,11 +174,11 @@ button { cursor: pointer; }
 .sync i { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); transition: background 0.4s; }
 .sync[data-state="live"] i { background: var(--ok); animation: breathe 2.4s ease-in-out infinite; }
 .sync[data-state="error"] i { background: var(--danger); }
-@keyframes breathe { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); } }
+@keyframes breathe { 50% { transform: scale(0.72); opacity: 0.55; } }
 
 main { min-width: 0; padding: 36px clamp(16px, 4vw, 52px) 150px; max-width: 1120px; width: 100%; }
 .view { animation: viewIn 0.7s var(--spring-soft) both; }
-@keyframes viewIn { from { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(4px); } }
+@keyframes viewIn { from { opacity: 0; transform: translateY(14px) scale(0.985); } }
 .view.still, .view.still .row, .view.still .bubble:not(.fresh), .view.still .chip:not(.fresh), .view.still .card, .view.still .stat, .view.still .suggestions button { animation: none; }
 .view.still .card::after { display: none; }
 
@@ -209,7 +211,6 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 /* Buttons: glass capsules that lift on hover and squish when pressed. */
 .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; padding: 9px 17px; border-radius: 999px; font-weight: 600; color: var(--text);
   background: radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), color-mix(in srgb, var(--sheen) calc(var(--light, 0) * 100%), transparent), transparent 70%), var(--glass-strong);
-  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), 0 4px 14px -6px rgba(30, 30, 70, 0.25);
   transition: transform 0.6s var(--spring), box-shadow 0.3s var(--ease), background-color 0.3s, filter 0.3s; }
 .btn:hover { transform: translateY(-1.5px) scale(1.02); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), 0 10px 24px -8px rgba(30, 30, 70, 0.35); }
@@ -230,7 +231,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 
 /* Segmented control with a sliding glass thumb. */
 .seg { position: relative; display: inline-flex; padding: 3px; border-radius: 14px; background: color-mix(in srgb, var(--glass) 80%, transparent);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 0 0 1px var(--glass-line); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 0 0 1px var(--glass-line); }
 .seg button { position: relative; z-index: 1; border: 0; background: none; padding: 6px 15px; border-radius: 11px; color: var(--muted); font-weight: 600; transition: color 0.25s, transform 0.5s var(--spring); }
 .seg button:hover { color: var(--text); }
 .seg button:active { transform: scale(0.93); transition-duration: 0.1s; }
@@ -331,9 +332,9 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 }
 .bubble.user { align-self: flex-end; color: #fff; border-bottom-right-radius: 7px; transform-origin: bottom right;
   background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 20px -10px var(--accent-glow); }
-.bubble.assistant { align-self: flex-start; border-bottom-left-radius: 7px; background: var(--glass-strong); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+.bubble.assistant { align-self: flex-start; border-bottom-left-radius: 7px; background: var(--glass-strong);
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), var(--glass-shadow); }
-.bubble.error { align-self: flex-start; background: color-mix(in srgb, var(--danger) 12%, var(--glass)); color: var(--danger); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.bubble.error { align-self: flex-start; background: color-mix(in srgb, var(--danger) 12%, var(--glass)); color: var(--danger); }
 .bubble.md { white-space: normal; }
 .bubble p { margin: 0; }
 .bubble p + p, .bubble p + ul, .bubble p + ol, .bubble ul + p, .bubble ol + p { margin-top: 8px; }
@@ -342,7 +343,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .bubble strong { font-weight: 680; }
 .bubble code { font: 0.9em ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); }
 .chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 560; padding: 6px 12px; border-radius: 99px;
-  background: color-mix(in srgb, var(--ok) 14%, var(--glass)); color: var(--ok); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  background: color-mix(in srgb, var(--ok) 14%, var(--glass)); color: var(--ok);
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px color-mix(in srgb, var(--ok) 20%, transparent); animation: bubbleIn 0.6s var(--spring) both; }
 .chip.fail { background: color-mix(in srgb, var(--danger) 12%, var(--glass)); color: var(--danger); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px color-mix(in srgb, var(--danger) 20%, transparent); }
 .chip svg { width: 14px; height: 14px; }
@@ -358,7 +359,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 @keyframes blink { 30% { opacity: 1; transform: translateY(-4px) scale(1.15); } }
 .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .suggestions button { border: 0; padding: 8px 14px; border-radius: 99px; color: var(--text); font-weight: 530;
-  background: radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), color-mix(in srgb, var(--sheen) calc(var(--light, 0) * 100%), transparent), transparent 70%), var(--glass); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+  background: radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), color-mix(in srgb, var(--sheen) calc(var(--light, 0) * 100%), transparent), transparent 70%), var(--glass-strong);
   box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), var(--glass-shadow); transition: transform 0.6s var(--spring), color 0.2s, box-shadow 0.3s; animation: bubbleIn 0.6s var(--spring) both; }
 .suggestions button:nth-child(2) { animation-delay: 60ms; } .suggestions button:nth-child(3) { animation-delay: 120ms; } .suggestions button:nth-child(4) { animation-delay: 180ms; }
 .suggestions button:hover { color: var(--accent); transform: translateY(-2px) scale(1.03); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--accent-soft), 0 10px 22px -10px var(--accent-glow); }
@@ -489,7 +490,6 @@ input:disabled, textarea:disabled { opacity: 0.6; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
-  .aurora i { animation: none; }
 }
 
 /* iOS zooms into any text field under 16px when it gets focus (and stays zoomed), so every
@@ -531,10 +531,11 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 
 .jelly { animation: jelly 0.6s linear !important; }
 
 /* ---- A light sweep across glass as a screen opens */
-.card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 48%, rgba(255, 255, 255, 0.05) 55%, transparent 65%) 0 0 / 260% 100% no-repeat;
-  opacity: 0; animation: shine 1.4s calc(0.15s + var(--i, 0) * 70ms) var(--ease) both; }
-@keyframes shine { 0% { opacity: 1; background-position: 120% 0; } 100% { opacity: 0.2; background-position: -60% 0; } }
+.card { overflow: clip; }
+.card::after { content: ""; position: absolute; inset: 0; pointer-events: none; will-change: transform, opacity;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.3) 50%, transparent 70%);
+  transform: translateX(-110%); opacity: 0; animation: shine 1.3s calc(0.15s + var(--i, 0) * 70ms) var(--ease) both; }
+@keyframes shine { 0% { opacity: 1; transform: translateX(-110%); } 100% { opacity: 0; transform: translateX(110%); } }
 :root[data-theme="dark"] .card::after { background-image: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.09) 48%, transparent 62%); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card::after { background-image: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.09) 48%, transparent 62%); } }
 
