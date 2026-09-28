@@ -4,6 +4,7 @@ import { OpenRouterClient, CURATED_MODELS, DEFAULT_MODEL } from "./openrouter.js
 import { ToolExecutor } from "./executor.js";
 import { AssistantEngine, bubbles, contextMessages, logEntries } from "./assistant.js";
 import { markdown } from "./markdown.js";
+import { ACCEPT, MAX_FILES, readAttachment, sizeLabel } from "./attachments.js";
 import { PRIORITY_LABELS, eventsOn, greeting, isOverdue, snapshotForPrompt, taskGroups, tasksDueOn, upcoming } from "./planner.js";
 import {
   addDays, dayKey, daysBetween, describeDue, displayEnd, eventTiming, firstDay, lastDay, longDay, monthTitle,
@@ -56,6 +57,10 @@ const ICONS = {
   phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.8"/><path d="M11 18.5h2"/>',
   tablet: '<rect x="4.5" y="2.5" width="15" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
   cloud: '<path d="M7 18h10a4 4 0 00.6-7.95A5.5 5.5 0 007.1 9.2 4.4 4.4 0 007 18z"/>',
+  clip: '<path d="M20.5 11.5l-8.2 8.2a5.2 5.2 0 01-7.4-7.4l8.5-8.5a3.5 3.5 0 015 5l-8.4 8.4a1.8 1.8 0 01-2.6-2.6l7.8-7.8"/>',
+  file: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>',
+  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8.5 8.5"/>',
+  close: '<path d="M7 7l10 10M17 7L7 17"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
 };
 const icon = (name, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ICONS[name]}</svg>`;
@@ -96,6 +101,7 @@ const state = {
   events: [],
   conversation: [],
   extras: [], // bubbles for this session only (an unanswered question, an error)
+  attachments: [], // files waiting to be sent with the next message
   pending: false,
   live: "connecting",
   loaded: false,
@@ -216,6 +222,7 @@ function signedOut(message) {
   // The key belongs to the account: don't leave it behind in a signed-out browser.
   store.set(KEYS.openrouter, null);
   state.keySynced = null;
+  state.attachments = [];
   state.devices = null;
   state.calendar = { account: undefined, problem: null, syncing: false, lastSync: 0, links: new Map() };
   stopRealtime?.();
@@ -588,20 +595,25 @@ function renderShell() {
       <nav class="tabbar" aria-label="Aria"><div class="tabbar-inner"><div class="nav" data-liquid="tabbar">${nav()}</div></div></nav>
     </div>
     <div class="ai-bar" id="ai-bar">
+      <div class="attach-tray" id="attach-tray" aria-label="Attached files" hidden></div>
       <form id="ai-form">
         <svg class="spark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.6 7.4L22 12l-7.4 2.6L12 22l-2.6-7.4L2 12l7.4-2.6z"/></svg>
         <label class="sr-only" for="ai-input">Ask Aria</label>
         <textarea id="ai-input" rows="1" placeholder="Add a task, or ask Aria…" enterkeyhint="send"></textarea>
+        <button class="attach" type="button" aria-label="Attach a file" title="Attach a timetable, calendar file, PDF or image" data-action="attach">${icon("clip")}</button>
+        <input type="file" id="ai-file" accept="${ACCEPT}" multiple hidden>
         <button class="send" type="submit" aria-label="Send" disabled>${icon("send")}</button>
       </form>
-    </div>`;
+    </div>
+    <div class="drop-veil" id="drop-veil" aria-hidden="true"><div class="glass"><span>${icon("clip")}</span><b>Drop to give it to Aria</b><small>Timetables, calendar files, PDFs and images</small></div></div>`;
   const input = $("#ai-input");
   const send = $("#ai-form .send");
   const grow = () => {
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
-    send.disabled = !input.value.trim() || state.pending;
+    send.disabled = (!input.value.trim() && !state.attachments.length) || state.pending || state.attachments.some((a) => a.loading);
   };
+  state.growInput = grow;
   input.addEventListener("input", grow);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
@@ -612,13 +624,97 @@ function renderShell() {
   $("#ai-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if (!text || state.pending) return;
+    const files = state.attachments.filter((a) => a.file);
+    if ((!text && !files.length) || state.pending || state.attachments.some((a) => a.loading)) return;
     input.value = "";
+    state.attachments = [];
+    renderTray();
     grow();
-    ask(text);
+    ask(text, files.map((a) => a.file));
+  });
+  $("#ai-file").addEventListener("change", (e) => {
+    attachFiles([...e.target.files]);
+    e.target.value = "";
+  });
+  input.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.files ?? [])];
+    if (files.length) {
+      e.preventDefault();
+      attachFiles(files);
+    }
   });
   render();
 }
+
+// ---- Attachments (files for the assistant)
+
+let attachSeq = 0;
+function attachFiles(files) {
+  if (!files.length || !state.client?.user) return;
+  const room = MAX_FILES - state.attachments.length;
+  if (room <= 0) return toast(`Up to ${MAX_FILES} files at a time.`, "error");
+  if (files.length > room) toast(`Only the first ${room} file${room === 1 ? "" : "s"} were attached (up to ${MAX_FILES}).`, "error");
+  for (const file of files.slice(0, room)) {
+    const item = { id: ++attachSeq, name: file.name || "Pasted image", size: file.size, type: file.type, loading: true, file: null };
+    state.attachments.push(item);
+    readAttachment(file).then((read) => {
+      item.file = read;
+      item.kind = read.kind;
+      item.note = read.note;
+    }).catch((error) => {
+      state.attachments = state.attachments.filter((a) => a !== item);
+      toast(error.message || `Couldn't read ${item.name}.`, "error");
+    }).finally(() => {
+      item.loading = false;
+      renderTray();
+      state.growInput?.();
+    });
+  }
+  renderTray();
+  state.growInput?.();
+  if (route() === "settings") navigate("assistant");
+  $("#ai-input")?.focus({ preventScroll: true });
+}
+
+function renderTray() {
+  const tray = $("#attach-tray");
+  if (!tray) return;
+  tray.hidden = state.attachments.length === 0;
+  tray.innerHTML = state.attachments.map((a) => {
+    const kind = a.kind ?? (/^image\//.test(a.type) ? "image" : "file");
+    const detail = a.loading ? "Reading…" : [a.note, sizeLabel(a.size)].filter(Boolean).join(" · ");
+    return `<div class="attachment ${a.loading ? "loading" : ""}" data-k="${a.id}">
+      <span class="attachment-icon">${a.loading ? '<span class="spinner"></span>' : icon(kind === "image" ? "image" : kind === "calendar" ? "calendar" : "file")}</span>
+      <span class="attachment-text"><b>${esc(a.name)}</b><small>${esc(detail)}</small></span>
+      <button type="button" class="attachment-remove" data-action="detach" data-id="${a.id}" aria-label="Remove ${esc(a.name)}">${icon("close")}</button>
+    </div>`;
+  }).join("");
+}
+
+// Drop files anywhere in the app to hand them to Aria.
+let dragDepth = 0;
+const draggingFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files") && !!state.client?.user && !!$("#ai-bar");
+document.addEventListener("dragenter", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  if (++dragDepth === 1) $("#drop-veil")?.classList.add("show");
+});
+document.addEventListener("dragover", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+});
+document.addEventListener("dragleave", (e) => {
+  if (!draggingFiles(e)) return;
+  if (--dragDepth <= 0) { dragDepth = 0; $("#drop-veil")?.classList.remove("show"); }
+});
+document.addEventListener("drop", (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $("#drop-veil")?.classList.remove("show");
+  attachFiles([...e.dataTransfer.files]);
+});
 
 function renderSync() {
   const el = $("#sync");
@@ -1111,7 +1207,7 @@ function viewAssistant() {
       </header>
       ${key ? "" : `<div class="notice glass-inset" role="note" aria-label="Connect OpenRouter"><div><b>Connect OpenRouter</b><div class="help">Aria uses your own OpenRouter key, saved to your account.</div></div><button class="btn primary" data-action="go-settings">Add key</button></div>`}
       <div class="chat" id="chat">
-        ${empty ? `<div class="assistant-empty"><strong>What should we plan?</strong><span>Aria can add, complete and delete tasks, and create, move or delete events — just ask.</span>
+        ${empty ? `<div class="assistant-empty"><strong>What should we plan?</strong><span>Aria can add, complete and delete tasks, and create, move or delete events — just ask. Attach a timetable, calendar file, PDF or photo and it can fill in your planner.</span>
           <div class="suggestions">${SUGGESTIONS.map((s, i) => `<button data-action="suggest" data-text="${esc(s)}" style="--i:${i}">${esc(s)}</button>`).join("")}</div></div>` : ""}
         ${chat}
         ${state.pending ? '<div class="bubble assistant typing" aria-label="Aria is thinking"><span class="goo"><i></i><i></i><i></i></span></div>' : ""}
@@ -1120,21 +1216,22 @@ function viewAssistant() {
     </section>`;
 }
 
-async function ask(text) {
+async function ask(text, files = []) {
   if (route() !== "assistant") navigate("assistant");
   if (!openRouterKey()) {
     state.extras.push({ kind: "user", text }, { kind: "error", text: "Add your OpenRouter key in Settings to use the assistant." });
     return render();
   }
+  const shown = [text, files.length ? `📎 ${files.map((f) => f.name).join(", ")}` : ""].filter(Boolean).join("\n");
   state.pending = true;
-  state.extras = [{ kind: "user", text }];
+  state.extras = [{ kind: "user", text: shown }];
   state.followChat = true; // you just sent something: keep the newest message in view
   render();
   const started = new Date();
   try {
     const engine = new AssistantEngine(new OpenRouterClient(openRouterKey), new ToolExecutor(assistantData()));
     const model = state.profile?.openrouter_model || DEFAULT_MODEL;
-    const reply = await engine.respond(text, model, contextMessages(state.conversation), snapshotForPrompt(state.tasks, state.events, started), started);
+    const reply = await engine.respond(text, model, contextMessages(state.conversation), snapshotForPrompt(state.tasks, state.events, started), started, undefined, files);
     const rows = logEntries(reply, started);
     state.conversation.push(...rows);
     state.extras = [];
@@ -1681,6 +1778,11 @@ document.addEventListener("click", async (e) => {
       return loadEvents().then(render).catch(fail);
     }
     case "suggest": return ask(el.dataset.text);
+    case "attach": return $("#ai-file")?.click();
+    case "detach":
+      state.attachments = state.attachments.filter((a) => String(a.id) !== el.dataset.id);
+      renderTray();
+      return state.growInput?.();
     case "go-settings": return navigate("settings");
     case "clear-chat":
       if (!confirm("Clear the whole conversation? This also clears it on your iPhone.")) return;

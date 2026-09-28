@@ -116,6 +116,16 @@ await page.route("https://openrouter.ai/api/v1/**", async (route) => {
   }
   const body = request.postDataJSON();
   aiRequests.push({ body, auth: request.headers().authorization });
+  // A message with files attached (the attachments step).
+  if (body.messages.some((m) => Array.isArray(m.content))) {
+    if (body.messages.at(-1).role === "user") {
+      return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+        id: "call_tt", type: "function",
+        function: { name: "create_event", arguments: JSON.stringify({ title: "Chemistry", start_at: "2026-11-02T09:00:00-05:00", end_at: "2026-11-02T10:00:00-05:00", repeat_weekly_until: "2026-11-23" }) },
+      }] } }] } });
+    }
+    return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "Your timetable is in: **Chemistry** every Monday at 9." } }] } });
+  }
   if (aiRequests.length === 1) {
     return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: null, tool_calls: [{
       id: "call_1", type: "function",
@@ -338,6 +348,49 @@ try {
     assert.equal(await page.evaluate(() => getSelection().toString().trim()), selected, "the highlight stays through a partial update");
     assert.equal(await page.getByLabel(/OpenRouter API key/).inputValue(), "sk-or-half-typed", "typed text stays through a partial update");
     await page.getByLabel(/OpenRouter API key/).fill("");
+  });
+
+  await step("assistant reads attached files: a timetable PDF and a calendar file", async () => {
+    await go("Today");
+    const ics = ["BEGIN:VCALENDAR", "BEGIN:VEVENT", "SUMMARY:Chemistry", "DTSTART:20261102T140000Z", "DTEND:20261102T150000Z",
+      "BEGIN:VALARM", "TRIGGER:-PT5M", "END:VALARM", "END:VEVENT", "END:VCALENDAR", ""].join("\r\n");
+    await page.locator("#ai-file").setInputFiles([
+      { name: "timetable.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 timetable") },
+      { name: "school.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) },
+      { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("remove me") },
+    ]);
+    await page.locator(".attachment").filter({ hasText: "school.ics" }).getByText("1 event").waitFor();
+    await page.locator(".attachment").filter({ hasText: "timetable.pdf" }).waitFor();
+    await page.getByRole("button", { name: "Remove notes.txt" }).click();
+    await page.locator(".attachment").filter({ hasText: "notes.txt" }).waitFor({ state: "detached" });
+    // Files the assistant can't read are refused with a clear message.
+    await page.locator("#ai-file").setInputFiles([{ name: "grades.xlsx", mimeType: "application/vnd.ms-excel", buffer: Buffer.from("x") }]);
+    await page.locator("#toast").getByText("Aria can't read grades.xlsx").waitFor();
+    assert.equal(await page.locator(".attachment").count(), 2);
+    await shot("assistant-attachments");
+
+    const before = aiRequests.length;
+    await page.getByLabel("Ask Aria").fill("Fill in my timetable until Nov 23");
+    await page.getByLabel("Ask Aria").press("Enter");
+    await page.locator(".bubble.assistant strong", { hasText: "Chemistry" }).waitFor();
+    await page.locator(".chip").filter({ hasText: "weekly until" }).waitFor();
+    assert.equal(await page.locator("#attach-tray").isHidden(), true, "the tray empties once sent");
+    await page.locator(".bubble.user").filter({ hasText: "📎 timetable.pdf, school.ics" }).waitFor();
+
+    const sent = aiRequests[before].body.messages.at(-1).content;
+    assert.deepEqual(sent.map((p) => p.type), ["text", "file", "text"]);
+    assert.match(sent[0].text, /^Fill in my timetable until Nov 23\n\nAttached: timetable\.pdf \(PDF\), school\.ics \(calendar file\)\./);
+    assert.equal(sent[1].file.filename, "timetable.pdf");
+    assert.equal(sent[1].file.file_data, `data:application/pdf;base64,${Buffer.from("%PDF-1.4 timetable").toString("base64")}`);
+    assert.match(sent[2].text, /SUMMARY:Chemistry\nDTSTART:20261102T140000Z/);
+    assert.doesNotMatch(sent[2].text, /VALARM|TRIGGER/);
+
+    const events = await rest(token, "events?select=start_at,source&title=eq.Chemistry&order=start_at.asc");
+    assert.deepEqual(events.map((e) => new Date(e.start_at).toISOString()), ["2026-11-02T14:00:00.000Z", "2026-11-09T14:00:00.000Z", "2026-11-16T14:00:00.000Z", "2026-11-23T14:00:00.000Z"]);
+    assert.ok(events.every((e) => e.source === "ai"));
+    const [logged] = await rest(token, "ai_conversations?select=content&role=eq.user&order=created_at.desc&limit=1");
+    assert.equal(logged.content, "Fill in my timetable until Nov 23\n📎 timetable.pdf, school.ics", "history keeps the names, not the files");
+    await rest(token, "events?title=eq.Chemistry", { method: "DELETE" });
   });
 
   await step("a change from the iPhone arrives live", async () => {

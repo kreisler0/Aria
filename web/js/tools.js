@@ -5,7 +5,7 @@
 
 export const TOOL_NAMES = ["create_task", "complete_task", "delete_task", "create_event", "delete_event", "reschedule_event", "list_tasks_for_range", "list_events_for_range"];
 
-export const TOOLS = [
+export const SHARED_TOOLS = [
   {
     "function": {
       "description": "Create a new to-do item",
@@ -212,3 +212,27 @@ export const TOOLS = [
     "type": "function"
   }
 ];
+
+// The web app's one addition: create_event can repeat weekly, so a timetable or other weekly
+// schedule is one call per lesson instead of one per occurrence. Everything else is the
+// shared schema unchanged (tests check that).
+export const REPEAT_PROPERTIES = {
+  "repeat_weekly_until": {
+    "description": "Optional. Repeat the event on the same weekday and time every week (or every repeat_interval_weeks weeks) up to and including this date, YYYY-MM-DD, at most one year after the start. Use it for timetables and other weekly schedules: create each lesson once, on its first date.",
+    "format": "date",
+    "type": "string"
+  },
+  "repeat_interval_weeks": {
+    "description": "With repeat_weekly_until: 1 = every week (default), 2 = every other week (e.g. week A/B timetables), up to 4",
+    "enum": [1, 2, 3, 4],
+    "type": "integer"
+  },
+};
+
+export const TOOLS = SHARED_TOOLS.map((tool) => tool.function.name !== "create_event" ? tool : {
+  ...tool,
+  function: {
+    ...tool.function,
+    parameters: { ...tool.function.parameters, properties: { ...tool.function.parameters.properties, ...REPEAT_PROPERTIES } },
+  },
+});

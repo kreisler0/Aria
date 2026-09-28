@@ -298,6 +298,16 @@ export class SupabaseClient {
     return toEvent(rows[0]);
   }
 
+  /** Several events in one request per 200, in order. */
+  async createEvents(list) {
+    const out = [];
+    for (let i = 0; i < list.length; i += 200) {
+      const rows = await this.rest("POST", "events", {}, list.slice(i, i + 200).map(eventRow), "return=representation");
+      out.push(...rows.map(toEvent));
+    }
+    return out.sort((a, b) => a.startAt - b.startAt);
+  }
+
   async updateEvent(id, fields) {
     const rows = await this.rest("PATCH", "events", { id: `eq.${id}` }, eventRow(fields), "return=representation");
     return rows?.[0] ? toEvent(rows[0]) : null;

@@ -3,6 +3,7 @@
 // algorithm as AriaKit's and Aria.Core's AssistantEngine.
 import { TOOLS } from "./tools.js";
 import { systemPrompt } from "./planner.js";
+import { attachmentLine, userContent } from "./attachments.js";
 
 export class AssistantEngine {
   /** `client.complete({model, messages, tools, toolChoice})` → {content, toolCalls: [{id, name, arguments}]} */
@@ -12,14 +13,20 @@ export class AssistantEngine {
     this.maxToolRounds = maxToolRounds;
   }
 
-  async respond(text, model, history, snapshot, now = new Date(), signal) {
-    const userText = (text ?? "").trim();
-    if (!userText) throw new Error("Type a message first.");
-    const messages = [{ role: "system", content: systemPrompt(now, snapshot) }, ...history, { role: "user", content: userText }];
-    const transcript = [{ role: "user", content: userText }];
+  /** `files`: attachments read by attachments.js; they go to the model for this turn only,
+   *  and the history keeps just their names. */
+  async respond(text, model, history, snapshot, now = new Date(), signal, files = []) {
+    const typed = (text ?? "").trim();
+    if (!typed && !files.length) throw new Error("Type a message first.");
+    const userText = typed || "Add what's in the attached file to my planner.";
+    const logged = files.length ? `${typed}${typed ? "\n" : ""}${attachmentLine(files)}` : userText;
+    const messages = [{ role: "system", content: systemPrompt(now, snapshot) }, ...history, { role: "user", content: userContent(userText, files) }];
+    const transcript = [{ role: "user", content: logged }];
     const outcomes = [];
+    // A file (a timetable, a calendar export) can take a few more rounds to work through.
+    const rounds = files.length ? Math.max(this.maxToolRounds, 10) : this.maxToolRounds;
 
-    for (let round = 0; round < this.maxToolRounds; round++) {
+    for (let round = 0; round < rounds; round++) {
       const reply = await this.client.complete({ model, messages, tools: TOOLS, toolChoice: "auto", signal });
       const calls = reply.toolCalls ?? [];
       if (calls.length === 0) {

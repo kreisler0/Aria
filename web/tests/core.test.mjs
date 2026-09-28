@@ -3,12 +3,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { TOOLS, TOOL_NAMES } from "../js/tools.js";
+import { TOOLS, TOOL_NAMES, REPEAT_PROPERTIES } from "../js/tools.js";
 import { systemPrompt, upcoming, taskGroups, snapshotForPrompt, greeting } from "../js/planner.js";
 import { ToolExecutor } from "../js/executor.js";
 import { AssistantEngine, contextMessages, logEntries, bubbles } from "../js/assistant.js";
 import { parseTimestamp, formatLocal, allDayStored, firstDay, lastDay } from "../js/dates.js";
 import { normalizeUrl } from "../js/supabase.js";
+import { compactCalendar, kindOf, userContent, attachmentLine } from "../js/attachments.js";
 
 const root = new URL("../../", import.meta.url);
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -20,8 +21,12 @@ test("runs in New York time", () => {
   assert.equal(Intl.DateTimeFormat().resolvedOptions().timeZone, "America/New_York");
 });
 
-test("tool schema is the shared one", () => {
-  assert.deepEqual(TOOLS, JSON.parse(readFileSync(new URL("shared/ai/tools.json", root), "utf8")));
+test("tool schema is the shared one, plus weekly repeats on create_event", () => {
+  const web = structuredClone(TOOLS);
+  const props = web.find((t) => t.function.name === "create_event").function.parameters.properties;
+  assert.deepEqual(Object.keys(REPEAT_PROPERTIES).map((k) => props[k]), Object.values(REPEAT_PROPERTIES));
+  for (const key of Object.keys(REPEAT_PROPERTIES)) delete props[key];
+  assert.deepEqual(web, JSON.parse(readFileSync(new URL("shared/ai/tools.json", root), "utf8")));
   assert.equal(TOOL_NAMES.length, 8);
 });
 
@@ -273,4 +278,92 @@ test("assistant replies render Markdown safely", async () => {
     '<p>[site](javascript:alert(1)) <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer">ok</a></p>');
   assert.equal(markdown("2 * 3 * 4 and snake_case_name"), "<p>2 * 3 * 4 and snake_case_name</p>");
   assert.equal(markdown("## Plan\nline one\nline two"), "<p><strong>Plan</strong></p><p>line one<br>line two</p>");
+});
+
+test("create_event repeats weekly: wall-clock time across DST, intervals, limits", async () => {
+  const data = new FakeData();
+  data.createEvents = async (list) => list.map((f) => { const e = { id: id(data.n++), ...f }; data.events.push(e); return e; });
+  const ex = new ToolExecutor(data, () => NOW);
+  // Mondays 9–10am from Oct 19 to Nov 9 2026; New York leaves DST on Nov 1.
+  const ok = await ex.execute(call("create_event", { title: "Maths", start_at: "2026-10-19T09:00:00-04:00", end_at: "2026-10-19T10:00:00-04:00", repeat_weekly_until: "2026-11-09" }));
+  assert.equal(ok.ok, true, ok.summary);
+  assert.deepEqual(data.events.map((e) => formatLocal(e.startAt)), ["2026-10-19T09:00:00-04:00", "2026-10-26T09:00:00-04:00", "2026-11-02T09:00:00-05:00", "2026-11-09T09:00:00-05:00"]);
+  assert.deepEqual(data.events.map((e) => formatLocal(e.endAt).slice(11, 19)), ["10:00:00", "10:00:00", "10:00:00", "10:00:00"]);
+  assert.deepEqual(ok.output.repeats, { every_weeks: 1, until: "2026-11-09", occurrences: 4 });
+  assert.match(nbsp(ok.summary), /^Scheduled “Maths” · .* · weekly until Mon, Nov 9 \(4×\)$/);
+  assert.equal(ok.mutation.type, "eventCreated");
+
+  data.events = [];
+  const ab = await ex.execute(call("create_event", { title: "Art", start_at: "2026-10-20T13:00:00-04:00", end_at: "2026-10-20T14:00:00-04:00", repeat_weekly_until: "2026-11-30", repeat_interval_weeks: 2 }));
+  assert.equal(ab.output.repeats.occurrences, 3);
+  assert.deepEqual(data.events.map((e) => dayKeyOf(e.startAt)), ["2026-10-20", "2026-11-03", "2026-11-17"]);
+
+  data.events = [];
+  const allDay = await ex.execute(call("create_event", { title: "Club", start_at: "2026-10-23T00:00:00-04:00", end_at: "2026-10-23T23:59:00-04:00", all_day: true, repeat_weekly_until: "2026-11-06" }));
+  assert.equal(allDay.ok, true);
+  assert.deepEqual(data.events.map((e) => e.startAt.toISOString()), ["2026-10-23T00:00:00.000Z", "2026-10-30T00:00:00.000Z", "2026-11-06T00:00:00.000Z"]);
+
+  for (const [args, error] of [
+    [{ repeat_weekly_until: "2026-10-01" }, "'repeat_weekly_until' must not be before the start."],
+    [{ repeat_weekly_until: "2027-12-01" }, "'repeat_weekly_until' must be at most one year after the start."],
+    [{ repeat_weekly_until: "2026-11-01", repeat_interval_weeks: 5 }, "'repeat_interval_weeks' must be 1, 2, 3 or 4."],
+    [{ repeat_weekly_until: "next term" }, `'repeat_weekly_until' must be a date in the form YYYY-MM-DD (got "next term").`],
+  ]) {
+    const bad = await ex.execute(call("create_event", { title: "x", start_at: "2026-10-19T09:00:00-04:00", end_at: "2026-10-19T10:00:00-04:00", ...args }));
+    assert.deepEqual(bad.output, { ok: false, error });
+  }
+});
+
+const dayKeyOf = (d) => formatLocal(d).slice(0, 10);
+
+test("attachments: file kinds, compact calendars and multimodal messages", async () => {
+  assert.equal(kindOf("Timetable.PDF", ""), "pdf");
+  assert.equal(kindOf("export.ics", ""), "calendar");
+  assert.equal(kindOf("photo", "image/jpeg"), "image");
+  assert.equal(kindOf("notes.csv", ""), "text");
+  assert.equal(kindOf("sheet.xlsx", "application/vnd.ms-excel"), null);
+
+  const ics = [
+    "BEGIN:VCALENDAR", "X-WR-CALNAME:School", "BEGIN:VTIMEZONE", "TZID:Europe/London", "BEGIN:STANDARD", "DTSTART:19701025T020000", "END:STANDARD", "END:VTIMEZONE",
+    "BEGIN:VEVENT", "UID:1", "SUMMARY:Physics", "DTSTART;TZID=Europe/London:20261005T090000", "DTEND;TZID=Europe/London:20261005T100000",
+    "RRULE:FREQ=WEEKLY;UNTIL=20261218T000000Z", "DESCRIPTION:A very long", " description that is folded", "LOCATION:Lab 2",
+    "BEGIN:VALARM", "TRIGGER:-PT15M", "SUMMARY:Alarm", "END:VALARM", "END:VEVENT",
+    "BEGIN:VEVENT", "SUMMARY:Cancelled trip", "STATUS:CANCELLED", "DTSTART;VALUE=DATE:20261010", "END:VEVENT",
+    "BEGIN:VEVENT", "SUMMARY:Sports ", " day", "DTSTART;VALUE=DATE:20261012", "DTEND;VALUE=DATE:20261013", "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  const cal = compactCalendar(ics);
+  assert.equal(cal.count, 2);
+  assert.equal(cal.text, [
+    "X-WR-CALNAME:School", "", "BEGIN:VEVENT", "SUMMARY:Physics", "DTSTART;TZID=Europe/London:20261005T090000", "DTEND;TZID=Europe/London:20261005T100000",
+    "RRULE:FREQ=WEEKLY;UNTIL=20261218T000000Z", "LOCATION:Lab 2", "END:VEVENT",
+    "BEGIN:VEVENT", "SUMMARY:Sports day", "DTSTART;VALUE=DATE:20261012", "DTEND;VALUE=DATE:20261013", "END:VEVENT",
+  ].join("\n"));
+  const short = compactCalendar(ics, 200);
+  assert.equal(short.shown, 1);
+  assert.match(short.text, /\(1 more events in the file were left out because it is too long\.\)$/);
+
+  assert.equal(userContent("hi"), "hi");
+  const files = [
+    { name: "timetable.pdf", kind: "pdf", data: "data:application/pdf;base64,JVBERi0=" },
+    { name: "board.jpg", kind: "image", data: "data:image/jpeg;base64,/9j/" },
+    { name: "school.ics", kind: "calendar", text: cal.text, note: "2 events" },
+  ];
+  const parts = userContent("Fill in my timetable", files);
+  assert.deepEqual(parts.map((p) => p.type), ["text", "file", "image_url", "text"]);
+  assert.match(parts[0].text, /^Fill in my timetable\n\nAttached: timetable\.pdf \(PDF\), board\.jpg \(image\), school\.ics \(calendar file\)\./);
+  assert.match(parts[0].text, /repeat_weekly_until/);
+  assert.deepEqual(parts[1], { type: "file", file: { filename: "timetable.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } });
+  assert.deepEqual(parts[2], { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/" } });
+  assert.match(parts[3].text, /^--- school\.ics \(2 events\) ---\nX-WR-CALNAME:School/);
+  assert.equal(attachmentLine(files), "📎 timetable.pdf, board.jpg, school.ics");
+
+  // The engine sends the parts for this turn and logs only the names.
+  const model = new ScriptedModel({ content: "Which dates does the timetable cover?", toolCalls: [] });
+  const engine = new AssistantEngine(model, new ToolExecutor(new FakeData(), () => NOW));
+  const reply = await engine.respond("", "m", [], { tasks: [], events: [] }, NOW, undefined, files.slice(0, 1));
+  assert.deepEqual(model.requests[0].messages[1].content.map((p) => p.type), ["text", "file"]);
+  assert.match(model.requests[0].messages[1].content[0].text, /^Add what's in the attached file to my planner\./);
+  assert.equal(logEntries(reply, NOW)[0].content, "📎 timetable.pdf");
+  await assert.rejects(engine.respond("  ", "m", [], { tasks: [], events: [] }, NOW), /Type a message first/);
 });

@@ -2,7 +2,7 @@
 // the iOS and Windows apps. Failures go back to the model as {"ok": false, "error": …} so it
 // can correct itself; nothing is written unless every argument is valid.
 import { TOOL_NAMES } from "./tools.js";
-import { addDays, allDayStored, dayAndTime, dayKey, dayRangeLabel, daysBetween, eventTiming, firstDay, formatLocal, lastDay, parseDay, parseTimestamp, startOfDay } from "./dates.js";
+import { addDays, allDayStored, dayAndTime, dayKey, dayLabel, dayRangeLabel, daysBetween, eventTiming, firstDay, formatLocal, lastDay, parseDay, parseTimestamp, startOfDay } from "./dates.js";
 
 class ArgumentError extends Error {}
 
@@ -187,8 +187,24 @@ export class ToolExecutor {
     const allDay = args.bool("all_day") ?? false;
     if (allDay) [start, end] = allDayStored(start, end);
     else if (end < start) throw new ArgumentError("'end_at' must not be before 'start_at'.");
-    const event = await this.data.createEvent({ title, startAt: start, endAt: end, allDay, source: "ai" });
-    return success(call, { event: eventJSON(event) }, `Scheduled “${event.title}” · ${eventTiming(event)}`, { type: "eventCreated", event });
+    const until = args.day("repeat_weekly_until");
+    const every = args.int("repeat_interval_weeks") ?? 1;
+    if (every < 1 || every > 4) throw new ArgumentError("'repeat_interval_weeks' must be 1, 2, 3 or 4.");
+    if (!until) {
+      const event = await this.data.createEvent({ title, startAt: start, endAt: end, allDay, source: "ai" });
+      return success(call, { event: eventJSON(event) }, `Scheduled “${event.title}” · ${eventTiming(event)}`, { type: "eventCreated", event });
+    }
+    const first = allDay ? firstDay({ startAt: start }) : dayKey(start);
+    if (until < first) throw new ArgumentError("'repeat_weekly_until' must not be before the start.");
+    if (daysBetween(first, until) > 366) throw new ArgumentError("'repeat_weekly_until' must be at most one year after the start.");
+    const series = weeklySeries(start, end, allDay, until, every).map(([startAt, endAt]) => ({ title, startAt, endAt, allDay, source: "ai" }));
+    const events = this.data.createEvents
+      ? await this.data.createEvents(series)
+      : await Promise.all(series.map((fields) => this.data.createEvent(fields)));
+    const event = events[0];
+    const cadence = every === 1 ? "weekly" : `every ${every} weeks`;
+    const summary = `Scheduled “${event.title}” · ${eventTiming(event)} · ${cadence} until ${dayLabel(startOfDay(until))} (${events.length}×)`;
+    return success(call, { event: eventJSON(event), repeats: { every_weeks: every, until, occurrences: events.length } }, summary, { type: "eventCreated", event });
   }
 
   async deleteEvent(call, args) {
@@ -234,6 +250,27 @@ export class ToolExecutor {
     const events = await this.data.fetchEvents(startOfDay(first), startOfDay(addDays(last, 1)));
     return success(call, { start: first, end: last, count: events.length, events: events.map(eventJSON) }, `Checked your calendar for ${dayRangeLabel(first, last)}`);
   }
+}
+
+/** The occurrences of a weekly repeat, up to and including the day `until`. Timed events keep
+ *  their local wall-clock time across daylight-saving changes; all-day ones their UTC days. */
+function weeklySeries(start, end, allDay, until, every) {
+  const out = [];
+  const length = end - start;
+  for (let week = 0; ; week += every) {
+    const s = new Date(start);
+    if (allDay) s.setUTCDate(s.getUTCDate() + week * 7);
+    else s.setDate(s.getDate() + week * 7);
+    if ((allDay ? firstDay({ startAt: s }) : dayKey(s)) > until) break;
+    let e = new Date(s.getTime() + length);
+    if (!allDay) {
+      // Same wall-clock end time as the first occurrence, even across a DST change.
+      e = new Date(end);
+      e.setDate(e.getDate() + week * 7);
+    }
+    out.push([s, e]);
+  }
+  return out;
 }
 
 function range(start, end) {
