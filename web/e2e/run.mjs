@@ -21,6 +21,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const out = process.env.ARIA_E2E_OUT ?? join(root, "e2e", "out");
 await mkdir(out, { recursive: true });
 const OPENROUTER_KEY = "sk-or-v1-e2e-test-key";
+const GROQ_KEY = "gsk_e2e-test-key";
 
 // ---- Static server for web/
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json" };
@@ -134,6 +135,41 @@ await page.route("https://openrouter.ai/api/v1/**", async (route) => {
   }
   return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "Added **Finish essay** — due *tomorrow at 5pm*." } }] } });
 });
+
+// Groq, played by the test: the image model reads pictures, the chat model calls tools.
+const groqRequests = [];
+await page.route("https://api.groq.com/openai/v1/**", async (route) => {
+  const request = route.request();
+  const body = request.postDataJSON();
+  groqRequests.push({ body, auth: request.headers().authorization });
+  if (!body.tools) {
+    const image = body.messages[0].content.find((p) => p.type === "image_url");
+    assert.match(image.image_url.url, /^data:image\/(jpeg|png);base64,/);
+    return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "Monday 09:00–10:00 Biology, Lab 3" } }] } });
+  }
+  if (body.messages.at(-1).role === "user") {
+    return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: null, tool_calls: [{
+      id: "call_bio", type: "function",
+      function: { name: "create_event", arguments: JSON.stringify({ title: "Biology", start_at: "2026-11-02T09:00:00-05:00", end_at: "2026-11-02T10:00:00-05:00", repeat_weekly_until: "2026-11-16" }) },
+    }] } }] } });
+  }
+  return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "<think>done</think>**Biology** is in, every Monday at 9." } }] } });
+});
+// pdf.js, played by the test (the app loads the real one from jsDelivr).
+await page.route("https://cdn.jsdelivr.net/npm/pdfjs-dist@*/build/**", (route) => route.fulfill({
+  contentType: "text/javascript", headers: { "Access-Control-Allow-Origin": "*" },
+  body: `export const GlobalWorkerOptions = {};
+    export function getDocument() {
+      const page = {
+        getTextContent: async () => ({ items: [{ str: "Mon 9:00 Biology", hasEOL: true }, { str: "Tue 11:00 History", hasEOL: false }] }),
+        getViewport: ({ scale }) => ({ width: 800 * scale, height: 600 * scale }),
+        render: ({ canvasContext }) => { canvasContext.fillStyle = "#333"; canvasContext.fillRect(10, 10, 50, 20); return { promise: Promise.resolve() }; },
+      };
+      return { promise: Promise.resolve({ numPages: 1, getPage: async () => page, destroy: async () => {} }) };
+    }`,
+}));
+// A real 2×2 PNG (the app decodes photos to scale them).
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==", "base64");
 
 let token = null;
 let userId = null;
@@ -393,6 +429,63 @@ try {
     await rest(token, "events?title=eq.Chemistry", { method: "DELETE" });
   });
 
+  await step("Groq: switch provider, synced key, GPT-OSS with a photo and a PDF read by Qwen", async () => {
+    await go("Settings");
+    await page.getByRole("group", { name: "Provider" }).getByRole("button", { name: "Groq" }).click();
+    await page.locator("#toast").getByText("Aria now uses Groq — add your Groq key below").waitFor();
+    await page.getByLabel(/Groq API key/).fill(GROQ_KEY);
+    await page.getByRole("button", { name: "Save key" }).click();
+    await page.getByText("Synced to your account", { exact: true }).waitFor();
+    const [secret] = await rest(token, "user_secrets?select=openrouter_key,groq_key");
+    assert.deepEqual(secret, { openrouter_key: OPENROUTER_KEY, groq_key: GROQ_KEY }, "both keys are kept");
+    assert.equal(await page.getByLabel("Model").inputValue(), "qwen/qwen3.8-27b", "Groq starts on Qwen 3.8 27B");
+    await page.getByLabel("Model").selectOption("openai/gpt-oss-120b");
+    await page.locator("#toast").getByText("Model saved").waitFor();
+    await page.getByText("This model reads text only").waitFor();
+    assert.equal(await page.getByLabel("Reads images with").inputValue(), "qwen/qwen3.8-27b");
+    const [profile] = await rest(token, `users?select=ai_provider,groq_model,openrouter_model&id=eq.${userId}`);
+    assert.deepEqual(profile, { ai_provider: "groq", groq_model: "openai/gpt-oss-120b", openrouter_model: "openai/gpt-4o" });
+    await shot("settings-groq");
+
+    await go("Assistant");
+    await page.waitForFunction(() => document.activeElement?.id === "ai-input");
+    assert.equal(await page.locator(".model-chip").innerText(), "GPT-OSS 120B");
+    await page.locator("#ai-file").setInputFiles([
+      { name: "timetable.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 timetable") },
+      { name: "board.png", mimeType: "image/png", buffer: PNG },
+    ]);
+    await page.locator(".attachment").filter({ hasText: "board.png" }).getByText(/KB/).waitFor();
+    await page.getByLabel("Ask Aria").fill("Add my timetable until Nov 16");
+    await page.getByLabel("Ask Aria").press("Enter");
+    await page.locator(".bubble.assistant strong", { hasText: "Biology" }).waitFor();
+    assert.equal(await page.locator(".bubble.assistant").last().innerText(), "Biology is in, every Monday at 9.", "thinking is hidden");
+    await page.waitForFunction(() => document.activeElement?.id === "ai-input"); // ready for the next message
+
+    assert.ok(groqRequests.every((r) => r.auth === `Bearer ${GROQ_KEY}`));
+    const readers = groqRequests.filter((r) => !r.body.tools);
+    assert.deepEqual(readers.map((r) => r.body.model), ["qwen/qwen3.8-27b", "qwen/qwen3.8-27b"], "the PDF page and the photo are read by Qwen");
+    const chat = groqRequests.filter((r) => r.body.tools);
+    assert.equal(chat[0].body.model, "openai/gpt-oss-120b");
+    const asked = chat[0].body.messages.at(-1).content;
+    assert.equal(typeof asked, "string", "GPT-OSS gets plain text");
+    assert.match(asked, /--- timetable\.pdf \(text of a 1-page PDF\) ---\nMon 9:00 Biology\nTue 11:00 History/);
+    assert.match(asked, /--- board\.png \(read from the image\) ---\nMonday 09:00–10:00 Biology, Lab 3/);
+    assert.doesNotMatch(asked, /data:image/);
+    assert.equal(chat[1].body.messages.at(-1).role, "tool");
+    assert.equal("name" in chat[1].body.messages.at(-1), false);
+    const events = await rest(token, "events?select=start_at&title=eq.Biology&order=start_at.asc");
+    assert.equal(events.length, 3);
+    const [logged] = await rest(token, "ai_conversations?select=content&role=eq.user&order=created_at.desc&limit=1");
+    assert.equal(logged.content, "Add my timetable until Nov 16\n📎 timetable.pdf, board.png");
+    await rest(token, "events?title=eq.Biology", { method: "DELETE" });
+
+    // Back to OpenRouter for the rest of the run; the Groq key stays saved.
+    await go("Settings");
+    await page.getByRole("group", { name: "Provider" }).getByRole("button", { name: "OpenRouter" }).click();
+    await page.locator("#toast").getByText("Aria now uses OpenRouter").waitFor();
+    assert.equal(await page.getByLabel("Model").inputValue(), "openai/gpt-4o");
+  });
+
   await step("a change from the iPhone arrives live", async () => {
     const [task] = await rest(token, "tasks", { method: "POST", body: JSON.stringify({ title: "Call Mum", priority: 2 }) });
     await go("Tasks");
@@ -459,6 +552,9 @@ try {
     assert.deepEqual(carrying.filter((t) => !JSON.parse(t)[0].includes("/rest/v1/user_secrets")), [], "…and nowhere else");
     const [secret] = await rest(token, "user_secrets?select=openrouter_key");
     assert.equal(secret.openrouter_key, OPENROUTER_KEY);
+    const groq = supabaseTraffic.filter((t) => t.includes(GROQ_KEY));
+    assert.ok(groq.length >= 1);
+    assert.deepEqual(groq.filter((t) => !JSON.parse(t)[0].includes("/rest/v1/user_secrets")), [], "the Groq key likewise");
   });
 
   await step("a second device gets the same key, lists both devices, and can sign the first out", async () => {

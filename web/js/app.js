@@ -1,10 +1,10 @@
 // Aria on the web: the same account, data and assistant as the iPhone app, in any browser.
 import { SupabaseClient, normalizeUrl } from "./supabase.js";
-import { OpenRouterClient, CURATED_MODELS, DEFAULT_MODEL } from "./openrouter.js";
+import { ChatClient, PROVIDERS, GROQ_MODELS, groqReadsImages, providerOf } from "./openrouter.js";
 import { ToolExecutor } from "./executor.js";
 import { AssistantEngine, bubbles, contextMessages, logEntries } from "./assistant.js";
 import { markdown } from "./markdown.js";
-import { ACCEPT, MAX_FILES, readAttachment, sizeLabel } from "./attachments.js";
+import { ACCEPT, MAX_FILES, adaptForGroq, readAttachment, sizeLabel, transcribeImage } from "./attachments.js";
 import { PRIORITY_LABELS, eventsOn, greeting, isOverdue, snapshotForPrompt, taskGroups, tasksDueOn, upcoming } from "./planner.js";
 import {
   addDays, dayKey, daysBetween, describeDue, displayEnd, eventTiming, firstDay, lastDay, longDay, monthTitle,
@@ -39,7 +39,7 @@ const store = {
   },
 };
 
-const KEYS = { backend: "aria.backend", session: "aria.session", openrouter: "aria.openrouterKey", theme: "aria.theme", accent: "aria.accent", device: "aria.deviceId" };
+const KEYS = { backend: "aria.backend", session: "aria.session", openrouter: "aria.openrouterKey", groq: "aria.groqKey", theme: "aria.theme", accent: "aria.accent", device: "aria.deviceId" };
 
 const ICONS = {
   today: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
@@ -106,7 +106,7 @@ const state = {
   live: "connecting",
   loaded: false,
   showCompleted: false,
-  models: null,
+  models: {}, // provider id → every model it offers (loaded on request)
   cal: { mode: "month", selected: dayKey(new Date()), month: dayKey(new Date()).slice(0, 8) + "01" },
   note: { key: null, text: "", loaded: false },
   devices: null, // null = not loaded; false = the backend has no devices table yet
@@ -122,7 +122,22 @@ let pollTimer = null;
  *  the keyboard up uninvited (and older iOS zooms the page in). */
 const canAutofocus = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
 
-const openRouterKey = () => store.get(KEYS.openrouter) || "";
+/** On the Assistant screen the Ask box is ready to type in — on computers and iPads; a
+ *  phone would cover the chat with its keyboard, so there it waits for a tap. */
+function focusAsk() {
+  const input = $("#ai-input");
+  if (!input || input.closest("[hidden]") || document.activeElement === input) return;
+  if (!canAutofocus() && !matchMedia("(min-width: 761px)").matches) return;
+  input.focus({ preventScroll: true });
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+// ---- The assistant's provider (OpenRouter or Groq), its key and models, per account.
+const provider = () => providerOf(state.profile?.ai_provider);
+const aiKey = (p = provider()) => store.get(KEYS[p.id]) || "";
+const aiModel = (p = provider()) => state.profile?.[p.modelField] || p.defaultModel;
+const visionModel = () => state.profile?.groq_vision_model || PROVIDERS.groq.defaultModel;
+const modelLabel = (p, id) => p.curated.find((m) => m.id === id)?.name.replace(/ · .*$/, "") ?? id;
 const route = () => {
   const name = location.hash.replace(/^#\/?/, "");
   return ROUTES.some(([r]) => r === name) ? name : "today";
@@ -221,6 +236,7 @@ function signedOut(message) {
   clearInterval(heartbeatTimer);
   // The key belongs to the account: don't leave it behind in a signed-out browser.
   store.set(KEYS.openrouter, null);
+  store.set(KEYS.groq, null);
   state.keySynced = null;
   state.attachments = [];
   state.devices = null;
@@ -366,20 +382,21 @@ function deviceName() {
 
 const missingTable = (error) => error?.status === 404 || /could not find the table|relation .* does not exist|PGRST205/i.test(error?.message ?? "");
 
-/** Makes this device and the account agree on the OpenRouter key: the account's key wins;
+/** Makes this device and the account agree on the assistant keys: the account's keys win;
  *  a key only this device has (from before keys synced) is uploaded to the account. */
 async function syncKey() {
   try {
-    const remote = await state.client.fetchSyncedKey();
-    const local = openRouterKey();
-    if (remote) {
-      if (remote !== local) store.set(KEYS.openrouter, remote);
-      state.keySynced = true;
-    } else if (local) {
-      await state.client.saveSyncedKey(local);
-      state.keySynced = true;
-    } else {
-      state.keySynced = false;
+    const remote = await state.client.fetchSyncedKeys();
+    state.keySynced = true;
+    state.groqSynced = remote.groq !== undefined;
+    for (const p of Object.values(PROVIDERS)) {
+      if (remote[p.id] === undefined) continue; // this backend can't hold it yet
+      const local = aiKey(p);
+      if (remote[p.id]) {
+        if (remote[p.id] !== local) store.set(KEYS[p.id], remote[p.id]);
+      } else if (local) {
+        await state.client.saveSyncedKey(local, p.keyField);
+      }
     }
   } catch (error) {
     state.keySynced = missingTable(error) ? "unsupported" : state.keySynced;
@@ -745,7 +762,7 @@ function render() {
     const scroll = sameScreen ? window.scrollY : 0;
     // Fields you've typed in (and where the cursor is) survive the rebuild.
     const active = document.activeElement;
-    const typed = sameScreen ? [...view.querySelectorAll("input[id], textarea[id], select[id]")]
+    const typed = sameScreen ? [...view.querySelectorAll("input[id], textarea[id]")]
       .filter((el) => el.type !== "checkbox" && (el.value !== el.defaultValue || el === active))
       .map((el) => ({ id: el.id, value: el.value, focused: el === active, start: el.selectionStart, end: el.selectionEnd })) : [];
     if (sameScreen) {
@@ -753,6 +770,12 @@ function render() {
       const next = document.createElement("template");
       next.innerHTML = `<div class="view still">${html}</div>`;
       morphChildren(view.firstElementChild, next.content.firstElementChild);
+      // Menus save as soon as they change, so they always show what's saved (a morph can
+      // leave a menu whose options were replaced on the wrong one).
+      for (const menu of view.querySelectorAll("select")) {
+        const saved = menu.querySelector("option[selected]");
+        if (saved && menu.value !== saved.value) menu.value = saved.value;
+      }
     } else {
       // Entrance animations play when a screen opens, not every time its data refreshes.
       view.innerHTML = `<div class="view">${html}</div>`;
@@ -772,6 +795,7 @@ function render() {
       if (name === "assistant") {
         const chat = $("#chat");
         if (chat) chat.scrollTop = chat.scrollHeight;
+        focusAsk();
       } else {
         window.scrollTo(0, scroll);
       }
@@ -1182,9 +1206,9 @@ function viewCalendar() {
 // ---- Assistant
 
 function viewAssistant() {
-  const key = openRouterKey();
-  const model = state.profile?.openrouter_model || DEFAULT_MODEL;
-  const modelName = CURATED_MODELS.find((m) => m.id === model)?.name ?? model;
+  const p = provider();
+  const key = aiKey(p);
+  const modelName = modelLabel(p, aiModel(p));
   const items = [...bubbles(state.conversation), ...state.extras];
   // Each message carries a key, so updates can append new ones instead of rebuilding.
   const chat = items.map((b, i) => {
@@ -1201,11 +1225,11 @@ function viewAssistant() {
         <div class="orb ${state.pending ? "thinking" : ""}" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
         <div class="assistant-title">
           <h1>Aria</h1>
-          <p class="subtitle"><span class="status">${state.pending ? '<span class="status-dot"></span>Thinking…' : "Your planning assistant"}</span><span class="sep">·</span><a href="#settings" class="model-chip">${esc(modelName)}</a></p>
+          <p class="subtitle"><span class="status">${state.pending ? '<span class="status-dot"></span>Thinking…' : "Your planning assistant"}</span><span class="sep">·</span><a href="#settings" class="model-chip" title="${esc(p.name)}">${esc(modelName)}</a></p>
         </div>
         ${state.conversation.length ? '<button class="btn ghost" data-action="clear-chat">Clear</button>' : ""}
       </header>
-      ${key ? "" : `<div class="notice glass-inset" role="note" aria-label="Connect OpenRouter"><div><b>Connect OpenRouter</b><div class="help">Aria uses your own OpenRouter key, saved to your account.</div></div><button class="btn primary" data-action="go-settings">Add key</button></div>`}
+      ${key ? "" : `<div class="notice glass-inset" role="note" aria-label="Connect ${p.name}"><div><b>Connect ${p.name}</b><div class="help">Aria uses your own ${p.name} key, saved to your account. Switch between OpenRouter and Groq in Settings.</div></div><button class="btn primary" data-action="go-settings">Add key</button></div>`}
       <div class="chat" id="chat">
         ${empty ? `<div class="assistant-empty"><strong>What should we plan?</strong><span>Aria can add, complete and delete tasks, and create, move or delete events — just ask. Attach a timetable, calendar file, PDF or photo and it can fill in your planner.</span>
           <div class="suggestions">${SUGGESTIONS.map((s, i) => `<button data-action="suggest" data-text="${esc(s)}" style="--i:${i}">${esc(s)}</button>`).join("")}</div></div>` : ""}
@@ -1218,8 +1242,9 @@ function viewAssistant() {
 
 async function ask(text, files = []) {
   if (route() !== "assistant") navigate("assistant");
-  if (!openRouterKey()) {
-    state.extras.push({ kind: "user", text }, { kind: "error", text: "Add your OpenRouter key in Settings to use the assistant." });
+  const p = provider();
+  if (!aiKey(p)) {
+    state.extras.push({ kind: "user", text }, { kind: "error", text: `Add your ${p.name} key in Settings to use the assistant.` });
     return render();
   }
   const shown = [text, files.length ? `📎 ${files.map((f) => f.name).join(", ")}` : ""].filter(Boolean).join("\n");
@@ -1229,9 +1254,14 @@ async function ask(text, files = []) {
   render();
   const started = new Date();
   try {
-    const engine = new AssistantEngine(new OpenRouterClient(openRouterKey), new ToolExecutor(assistantData()));
-    const model = state.profile?.openrouter_model || DEFAULT_MODEL;
-    const reply = await engine.respond(text, model, contextMessages(state.conversation), snapshotForPrompt(state.tasks, state.events, started), started, undefined, files);
+    const client = new ChatClient(p, () => aiKey(p));
+    const model = aiModel(p);
+    // Groq takes no PDFs and only some models see images: turn files into what it reads.
+    const prepared = p.id === "groq" && files.some((f) => f.kind === "pdf" || f.kind === "image")
+      ? await adaptForGroq(files, { chatReadsImages: groqReadsImages(model), transcribe: (image) => transcribeImage(client, visionModel(), image) })
+      : files;
+    const engine = new AssistantEngine(client, new ToolExecutor(assistantData()));
+    const reply = await engine.respond(text, model, contextMessages(state.conversation), snapshotForPrompt(state.tasks, state.events, started), started, undefined, prepared);
     const rows = logEntries(reply, started);
     state.conversation.push(...rows);
     state.extras = [];
@@ -1250,6 +1280,7 @@ async function ask(text, files = []) {
     state.pending = false;
     $("#ai-input")?.dispatchEvent(new Event("input"));
     render();
+    if (route() === "assistant") focusAsk(); // ready for the next message
   }
 }
 
@@ -1359,13 +1390,28 @@ function connectICloud() {
   });
 }
 
+function groqVisionRow() {
+  const current = visionModel();
+  const options = GROQ_MODELS.filter((m) => groqReadsImages(m.id));
+  for (const m of state.models.groq ?? []) if (groqReadsImages(m.id) && !options.some((o) => o.id === m.id)) options.push(m);
+  if (!options.some((o) => o.id === current)) options.push({ id: current, name: current });
+  return `<div class="set-row stack">
+    <label class="field" style="margin-bottom:8px">Reads images with
+      <select id="vision-select">${options.map((o) => `<option value="${esc(o.id)}" ${o.id === current ? "selected" : ""}>${esc(o.name.replace(/ · .*$/, ""))}</option>`).join("")}</select></label>
+    <p class="help" style="margin:4px 0 0">Used for timetable photos and scanned PDFs when the model above can't see images.</p>
+  </div>`;
+}
+
 function viewSettings() {
   const user = state.client.user;
-  const key = openRouterKey();
-  const model = state.profile?.openrouter_model || DEFAULT_MODEL;
-  const options = [...CURATED_MODELS];
-  for (const m of state.models ?? []) if (!options.some((o) => o.id === m.id)) options.push(m);
+  const p = provider();
+  const key = aiKey(p);
+  const model = aiModel(p);
+  const options = [...p.curated];
+  for (const m of state.models[p.id] ?? []) if (!options.some((o) => o.id === m.id)) options.push(m);
   const known = options.some((o) => o.id === model);
+  const canChoose = !!state.profile && "ai_provider" in state.profile; // the backend has the provider columns
+  const synced = state.keySynced === true && (p.id === "openrouter" || state.groqSynced);
   const theme = store.get(KEYS.theme) || "system";
   const accent = store.get(KEYS.accent) || ACCENTS[0][0];
   return `
@@ -1386,15 +1432,18 @@ function viewSettings() {
 
       <h2>Assistant</h2>
       <div class="card">
+        <div class="set-row"><span class="label">Provider</span>
+          <div class="seg" role="group" aria-label="Provider">${Object.values(PROVIDERS).map((o) => `<button data-action="provider" data-provider="${o.id}" aria-pressed="${p.id === o.id}" ${canChoose || o.id === "openrouter" ? "" : "disabled"}>${o.name}</button>`).join("")}</div></div>
+        ${canChoose ? "" : '<p class="help" style="margin:0 18px 12px">Groq needs the latest database update on your Supabase project (it installs itself from GitHub).</p>'}
         <div class="set-row stack">
           <form id="key-form">
-            <label class="field" style="margin-bottom:8px">OpenRouter API key ${key ? `<span class="pill ai" style="margin-left:6px">${state.keySynced === true ? "Synced to your account" : "Saved on this device"}</span>` : ""}
-              <input id="key-input" type="password" name="key" placeholder="${key ? "•••••••• (saved)" : "sk-or-v1-…"}" autocomplete="off" spellcheck="false"></label>
+            <label class="field" style="margin-bottom:8px">${p.name} API key ${key ? `<span class="pill ai" style="margin-left:6px">${synced ? "Synced to your account" : "Saved on this device"}</span>` : ""}
+              <input id="key-input" type="password" name="key" placeholder="${key ? "•••••••• (saved)" : p.keyPlaceholder}" autocomplete="off" spellcheck="false"></label>
             <div class="hstack"><button class="btn primary" type="submit">Save key</button>${key ? '<button class="btn danger" type="button" data-action="remove-key">Remove</button>' : ""}</div>
           </form>
-          <p class="help" style="margin:10px 0 0">Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. ${state.keySynced === "unsupported"
+          <p class="help" style="margin:10px 0 0">Get a key at <a href="${p.keysUrl}" target="_blank" rel="noopener">${p.keysHost}</a>. ${state.keySynced === "unsupported"
             ? "Saved on this device only: your Supabase project needs the latest database update (supabase/migrations) to share it across devices."
-            : "Saved to your account, so every device you sign in on uses the same key. It's private to your account in your Supabase project, and only ever sent to OpenRouter."}</p>
+            : `Saved to your account, so every device you sign in on uses the same key. It's private to your account in your Supabase project, and only ever sent to ${p.name}.`}</p>
         </div>
         <div class="set-row stack">
           <label class="field" style="margin-bottom:8px">Model
@@ -1403,11 +1452,16 @@ function viewSettings() {
               ${known ? "" : `<option value="${esc(model)}" selected>${esc(model)}</option>`}
             </select></label>
           <div class="hstack">
-            ${state.models ? "" : '<button class="btn" data-action="load-models">Show all tool-capable models</button>'}
-            <form id="custom-model-form" class="hstack" style="flex:1;min-width:240px"><input id="custom-model" type="text" placeholder="Or type a model id, e.g. openai/gpt-4.1" style="flex:1"><button class="btn" type="submit">Use</button></form>
+            ${state.models[p.id] ? "" : `<button class="btn" data-action="load-models">Show all ${p.id === "groq" ? "" : "tool-capable "}models</button>`}
+            <form id="custom-model-form" class="hstack" style="flex:1;min-width:240px"><input id="custom-model" type="text" placeholder="Or type a model id, e.g. ${p.modelExample}" style="flex:1"><button class="btn" type="submit">Use</button></form>
           </div>
-          <p class="help" style="margin:10px 0 0">Saved to your account, so the iPhone app uses it too. The model must support tool calling.</p>
+          <p class="help" style="margin:10px 0 0">${p.id === "groq"
+            ? (groqReadsImages(model)
+              ? "This model reads images itself. PDFs are turned into text (and short ones into page images) before they're sent, since Groq doesn't take PDF files."
+              : "This model reads text only: timetable photos and scanned pages are first read by the image model below, then handed to it.")
+            : "Saved to your account, so every device uses it. The model must support tool calling."}</p>
         </div>
+        ${p.id === "groq" ? groqVisionRow() : ""}
       </div>
 
       <h2>Appearance</h2>
@@ -1655,6 +1709,8 @@ document.addEventListener("change", async (e) => {
     render();
   } else if (t.id === "model-select") {
     setModel(t.value);
+  } else if (t.id === "vision-select") {
+    setProfile({ groq_vision_model: t.value }, "Image model saved");
   } else if (t.dataset.action === "toggle-calendar" || t.id === "default-calendar") {
     const a = state.calendar.account;
     const selected = new Set(a.selected);
@@ -1696,10 +1752,12 @@ document.addEventListener("submit", async (e) => {
   } else if (form.id === "key-form") {
     e.preventDefault();
     const value = form.key.value.trim();
-    if (!value) return toast("Paste your OpenRouter key first.", "error");
-    store.set(KEYS.openrouter, value);
+    const p = provider();
+    if (!value) return toast(`Paste your ${p.name} key first.`, "error");
+    store.set(KEYS[p.id], value);
+    form.key.value = "";
     try {
-      await state.client.saveSyncedKey(value);
+      await state.client.saveSyncedKey(value, p.keyField);
       state.keySynced = true;
       toast("Key saved to your account — all your devices will use it");
     } catch (error) {
@@ -1709,22 +1767,27 @@ document.addEventListener("submit", async (e) => {
     render();
   } else if (form.id === "custom-model-form") {
     e.preventDefault();
+    const p = provider();
     const value = $("#custom-model").value.trim();
-    if (!/^[\w.-]+\/[\w.:-]+$/.test(value)) return toast("Model ids look like provider/model, e.g. openai/gpt-4.1.", "error");
+    const shape = p.id === "groq" ? /^[\w.:/-]+$/ : /^[\w.-]+\/[\w.:-]+$/;
+    if (!shape.test(value)) return toast(`Model ids look like ${p.modelExample}.`, "error");
     setModel(value);
   }
 });
 
-async function setModel(model) {
+/** Saves assistant preferences (provider, models) to the account. */
+async function setProfile(fields, message) {
   try {
-    await state.client.setModel(model);
-    state.profile = { ...(state.profile ?? {}), openrouter_model: model };
-    toast("Model saved");
+    await state.client.updateProfile(fields);
+    state.profile = { ...(state.profile ?? {}), ...fields };
+    toast(message);
     render();
   } catch (error) {
     fail(error);
   }
 }
+
+const setModel = (model) => setProfile({ [provider().modelField]: model }, "Model saved");
 
 document.addEventListener("click", async (e) => {
   const nav = e.target.closest("[data-nav]");
@@ -1800,17 +1863,23 @@ document.addEventListener("click", async (e) => {
       await state.client.removeDevice(deviceId()).catch(() => {});
       await state.client.signOut();
       return signedOut("");
-    case "remove-key":
-      if (!confirm("Remove your OpenRouter key from your account? The assistant stops working on all your devices until you add one again.")) return;
+    case "remove-key": {
+      const p = provider();
+      if (!confirm(`Remove your ${p.name} key from your account? The assistant stops working on all your devices until you add one again.`)) return;
       try {
-        await state.client.clearSyncedKey();
+        await state.client.clearSyncedKey(p.keyField);
       } catch (error) {
         if (!missingTable(error)) return fail(error);
       }
-      store.set(KEYS.openrouter, null);
-      state.keySynced = false;
+      store.set(KEYS[p.id], null);
       toast("Key removed from your account");
       return render();
+    }
+    case "provider": {
+      const p = providerOf(el.dataset.provider);
+      if (p.id === provider().id) return;
+      return setProfile({ ai_provider: p.id }, `Aria now uses ${p.name}${aiKey(p) ? "" : ` — add your ${p.name} key below`}`);
+    }
     case "connect-icloud": return connectICloud();
     case "sync-icloud": return syncCalendar({ quiet: false, force: true });
     case "disconnect-icloud":
@@ -1839,14 +1908,19 @@ document.addEventListener("click", async (e) => {
     case "load-models":
       el.disabled = true;
       el.textContent = "Loading…";
-      try {
-        state.models = await new OpenRouterClient(openRouterKey).models();
-        render();
-        toast(`${state.models.length} tool-capable ${state.models.length === 1 ? "model" : "models"} available`);
-      } catch (error) {
-        fail(error);
-        el.disabled = false;
-        el.textContent = "Show all tool-capable models";
+      {
+        const p = provider();
+        const label = el.textContent;
+        try {
+          const models = await new ChatClient(p, () => aiKey(p)).models();
+          state.models[p.id] = models;
+          render();
+          toast(`${models.length} ${p.id === "groq" ? "" : "tool-capable "}${models.length === 1 ? "model" : "models"} available`);
+        } catch (error) {
+          fail(error);
+          el.disabled = false;
+          el.textContent = label;
+        }
       }
       return;
     case "theme":

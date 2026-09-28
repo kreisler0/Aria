@@ -367,3 +367,77 @@ test("attachments: file kinds, compact calendars and multimodal messages", async
   assert.equal(logEntries(reply, NOW)[0].content, "📎 timetable.pdf");
   await assert.rejects(engine.respond("  ", "m", [], { tasks: [], events: [] }, NOW), /Type a message first/);
 });
+
+test("Groq: requests, text-only models get plain strings, thinking is hidden, errors are clear", async () => {
+  const { ChatClient, groqReadsImages } = await import("../js/openrouter.js");
+  const sent = [];
+  let reply = { choices: [{ message: { content: "<think>hmm</think>Done.", tool_calls: [{ id: "c1", function: { name: "create_task", arguments: "{}" } }] } }] };
+  let status = 200;
+  const fake = async (url, init) => {
+    sent.push({ url, init, body: init?.body ? JSON.parse(init.body) : null });
+    return { ok: status < 400, status, json: async () => reply };
+  };
+  const groq = new ChatClient("groq", () => "gsk_test", fake);
+  const out = await groq.complete({ model: "openai/gpt-oss-120b", tools: [], messages: [
+    { role: "user", content: [{ type: "text", text: "a" }, { type: "text", text: "b" }] },
+    { role: "tool", toolCallId: "c0", name: "x", content: "{}" },
+  ] });
+  assert.equal(sent[0].url, "https://api.groq.com/openai/v1/chat/completions");
+  assert.equal(sent[0].init.headers.Authorization, "Bearer gsk_test");
+  assert.equal(sent[0].init.headers["X-Title"], undefined);
+  assert.deepEqual(sent[0].body.messages, [{ role: "user", content: "a\n\nb" }, { role: "tool", tool_call_id: "c0", content: "{}" }]);
+  assert.equal(out.content, "Done.");
+  assert.equal(out.toolCalls[0].name, "create_task");
+
+  // Images stay as parts; a request without tools sends none.
+  await groq.complete({ model: "qwen/qwen3.8-27b", messages: [{ role: "user", content: [{ type: "text", text: "a" }, { type: "image_url", image_url: { url: "data:x" } }] }] });
+  assert.equal(Array.isArray(sent[1].body.messages[0].content), true);
+  assert.equal("tools" in sent[1].body, false);
+
+  status = 400;
+  reply = { error: { message: "Failed to call a function", code: "tool_use_failed" } };
+  await assert.rejects(groq.complete({ model: "m", messages: [] }), /malformed tool call/);
+  status = 401;
+  await assert.rejects(groq.complete({ model: "m", messages: [] }), /Groq didn't accept your key/);
+  await assert.rejects(new ChatClient("groq", () => "", fake).complete({ model: "m", messages: [] }), /Add your Groq key in Settings/);
+
+  assert.equal(groqReadsImages("qwen/qwen3.8-27b"), true);
+  assert.equal(groqReadsImages("qwen/qwen3.6-27b"), true);
+  assert.equal(groqReadsImages("meta-llama/llama-4-scout-17b-16e-instruct"), true);
+  assert.equal(groqReadsImages("openai/gpt-oss-120b"), false);
+  assert.equal(groqReadsImages("qwen/qwen3-32b"), false);
+});
+
+test("Groq files: PDFs become text and page images; text-only models get images read first", async () => {
+  const { adaptForGroq } = await import("../js/attachments.js");
+  const pdf = async () => ({ text: "Mon 9:00 Maths", pages: ["data:image/jpeg;base64,P1"], pageCount: 1 });
+  const files = [
+    { name: "timetable.pdf", kind: "pdf", data: "data:application/pdf;base64,JVBE" },
+    { name: "photo.jpg", kind: "image", data: "data:image/jpeg;base64,IMG" },
+    { name: "school.ics", kind: "calendar", text: "BEGIN:VEVENT", note: "1 event" },
+  ];
+  // A model that sees images gets them directly (2 ≤ 3).
+  const seeing = await adaptForGroq(files, { chatReadsImages: true, transcribe: () => assert.fail("no transcription needed"), pdf });
+  assert.deepEqual(seeing.map((f) => [f.name, f.kind]), [
+    ["timetable.pdf", "text"], ["school.ics", "calendar"], ["timetable.pdf, page 1", "image"], ["photo.jpg", "image"]]);
+  assert.equal(seeing[0].note, "text of a 1-page PDF");
+  assert.equal(attachmentLine(seeing), "📎 timetable.pdf, school.ics, photo.jpg");
+
+  // GPT-OSS can't: each image is read into text by the image model first.
+  const read = [];
+  const blind = await adaptForGroq(files, { chatReadsImages: false, transcribe: async (img) => (read.push(img.name), `rows of ${img.name}`), pdf });
+  assert.deepEqual(read, ["timetable.pdf, page 1", "photo.jpg"]);
+  assert.deepEqual(blind.map((f) => f.kind), ["text", "calendar", "text", "text"]);
+  assert.equal(blind.every((f) => f.kind !== "image" && f.kind !== "pdf"), true);
+  const parts = userContent("Fill it in", blind);
+  assert.deepEqual(parts.map((p) => p.type), ["text", "text", "text", "text", "text"]);
+  assert.match(parts[3].text, /^--- timetable\.pdf, page 1 \(read from the image\) ---\nrows of timetable\.pdf, page 1$/);
+
+  // Too many images for one request: read them all first, even for a model that sees.
+  const many = Array.from({ length: 4 }, (_, i) => ({ name: `p${i}.png`, kind: "image", data: "data:image/png;base64,X" }));
+  const over = await adaptForGroq(many, { chatReadsImages: true, transcribe: async () => "text", pdf });
+  assert.equal(over.every((f) => f.kind === "text"), true);
+
+  await assert.rejects(adaptForGroq(files.slice(0, 1), { chatReadsImages: true, transcribe: null, pdf: async () => { throw new Error("bad xref"); } }),
+    /Couldn't open timetable\.pdf: bad xref\./);
+});

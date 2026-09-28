@@ -84,7 +84,111 @@ export function userContent(text, files = []) {
 }
 
 /** The line kept in your history (and shown in the chat) for a message with files. */
-export const attachmentLine = (files) => (files.length ? `📎 ${files.map((f) => f.name).join(", ")}` : "");
+export const attachmentLine = (files) => (files.length ? `📎 ${[...new Set(files.map((f) => f.from ?? f.name))].join(", ")}` : "");
+
+// ---- Groq: no PDF files, and only some models see images
+
+export const GROQ_MAX_IMAGES = 3; // images Groq accepts in one request
+
+export const TRANSCRIBE_PROMPT = [
+  "Transcribe everything in this image that matters for planning, as plain text.",
+  "For a timetable or schedule, list every entry on its own line: day (and week, e.g. Week A/B, if shown), start–end time, subject or title, room and teacher.",
+  "Keep the headings, dates, term names and any notes. Don't summarise or leave anything out; if something is unreadable, say so.",
+].join(" ");
+
+/** Turns attachments into what a Groq model can take: PDFs become their text (and, when
+ *  short or scanned, page images); images go to the chat model if it can see them (up to
+ *  GROQ_MAX_IMAGES), otherwise `transcribe(image)` reads each one into text first. */
+export async function adaptForGroq(files, { chatReadsImages, transcribe, pdf = pdfContents }) {
+  const out = [];
+  const images = [];
+  for (const f of files) {
+    if (f.kind === "pdf") {
+      let read;
+      try {
+        read = await pdf(f.data);
+      } catch (error) {
+        throw new Error(`Couldn't open ${f.name}: ${error?.message || "it may be damaged or password-protected"}.`);
+      }
+      if (read.text.trim()) {
+        const text = read.text.slice(0, MAX_TEXT);
+        out.push({ name: f.name, from: f.name, kind: "text", text, note: `text of a ${read.pageCount}-page PDF${text.length < read.text.length ? ", shortened" : ""}` });
+      }
+      read.pages.forEach((data, i) => images.push({ name: `${f.name}, page ${i + 1}`, from: f.name, kind: "image", data }));
+    } else if (f.kind === "image") {
+      images.push(f);
+    } else {
+      out.push(f);
+    }
+  }
+  if (chatReadsImages && images.length <= GROQ_MAX_IMAGES) return [...out, ...images];
+  for (const image of images) {
+    out.push({ name: image.name, from: image.from ?? image.name, kind: "text", text: await transcribe(image), note: "read from the image" });
+  }
+  return out;
+}
+
+/** Reads one image into text with a vision model. */
+export async function transcribeImage(client, model, image) {
+  let reply;
+  try {
+    reply = await client.complete({ model, messages: [{ role: "user", content: [
+      { type: "text", text: TRANSCRIBE_PROMPT },
+      { type: "image_url", image_url: { url: image.data } },
+    ] }] });
+  } catch (error) {
+    throw new Error(`Reading ${image.name} with ${model}: ${error.message}`);
+  }
+  const text = reply.content?.trim();
+  if (!text) throw new Error(`${model} couldn't read ${image.name}. Try a clearer photo.`);
+  return text;
+}
+
+// pdf.js (Mozilla's PDF reader) is loaded from the CDN the first time a PDF goes to Groq.
+export const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/";
+let pdfjs = null;
+const loadPdfjs = () => (pdfjs ??= import(`${PDFJS}pdf.min.mjs`).then((lib) => {
+  lib.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.mjs`;
+  return lib;
+}).catch((error) => {
+  pdfjs = null;
+  throw new Error(`the PDF reader didn't load (${error?.message || "offline?"})`);
+}));
+
+/** A PDF's text (up to 40 pages), plus page images when it's short (≤ GROQ_MAX_IMAGES
+ *  pages, so a timetable's grid survives) or has no text layer (a scan). */
+export async function pdfContents(dataUrl) {
+  const lib = await loadPdfjs();
+  const bytes = Uint8Array.from(atob(dataUrl.slice(dataUrl.indexOf(",") + 1)), (c) => c.charCodeAt(0));
+  const doc = await lib.getDocument({ data: bytes }).promise;
+  const pageCount = doc.numPages;
+  let text = "";
+  for (let n = 1; n <= Math.min(pageCount, 40); n++) {
+    const page = await doc.getPage(n);
+    const content = await page.getTextContent();
+    const lines = content.items.map((item) => `${item.str}${item.hasEOL ? "\n" : " "}`).join("").replace(/[ \t]+\n/g, "\n").trim();
+    if (lines) text += `${pageCount > 1 ? `\n\n[Page ${n}]\n` : ""}${lines}`;
+  }
+  const scanned = text.replace(/\s|\[Page \d+\]/g, "").length < 40 * Math.min(pageCount, 40);
+  const pages = [];
+  if (pageCount <= GROQ_MAX_IMAGES || scanned) {
+    for (let n = 1; n <= Math.min(pageCount, GROQ_MAX_IMAGES); n++) {
+      const page = await doc.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: Math.min(3, 1600 / Math.max(base.width, base.height)) });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      pages.push(canvas.toDataURL("image/jpeg", 0.85));
+    }
+  }
+  await doc.destroy?.();
+  return { text: text.trim(), pages, pageCount };
+}
 
 export const sizeLabel = (bytes) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
 

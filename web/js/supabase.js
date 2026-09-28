@@ -237,7 +237,12 @@ export class SupabaseClient {
   }
 
   setModel(model) {
-    return this.rest("PATCH", "users", { id: `eq.${this.user.id}` }, { openrouter_model: model }, "return=minimal");
+    return this.updateProfile({ openrouter_model: model });
+  }
+
+  /** Assistant preferences: openrouter_model, ai_provider, groq_model, groq_vision_model. */
+  updateProfile(fields) {
+    return this.rest("PATCH", "users", { id: `eq.${this.user.id}` }, fields, "return=minimal");
   }
 
   // Tasks
@@ -345,20 +350,32 @@ export class SupabaseClient {
     return this.rest("DELETE", "ai_conversations", { user_id: `eq.${this.user.id}` }, undefined, "return=minimal");
   }
 
-  // The OpenRouter key, shared by every device on the account (user_secrets, owner-only).
+  // The assistant keys (OpenRouter, Groq), shared by every device on the account
+  // (user_secrets, owner-only). Older backends only have the OpenRouter column.
+
+  /** {openrouter: key|null, groq: key|null}; groq is undefined when the backend lacks it. */
+  async fetchSyncedKeys() {
+    try {
+      const rows = await this.rest("GET", "user_secrets", { select: "openrouter_key,groq_key" });
+      return { openrouter: rows?.[0]?.openrouter_key || null, groq: rows?.[0]?.groq_key || null };
+    } catch (error) {
+      if (!/groq_key/.test(error?.message ?? "")) throw error;
+      return { openrouter: await this.fetchSyncedKey(), groq: undefined };
+    }
+  }
 
   async fetchSyncedKey() {
     const rows = await this.rest("GET", "user_secrets", { select: "openrouter_key" });
     return rows?.[0]?.openrouter_key || null;
   }
 
-  saveSyncedKey(key) {
-    return this.rest("POST", "user_secrets", { on_conflict: "user_id" }, { user_id: this.user.id, openrouter_key: key },
+  saveSyncedKey(key, field = "openrouter_key") {
+    return this.rest("POST", "user_secrets", { on_conflict: "user_id" }, { user_id: this.user.id, [field]: key },
       "resolution=merge-duplicates,return=minimal");
   }
 
-  clearSyncedKey() {
-    return this.rest("DELETE", "user_secrets", { user_id: `eq.${this.user.id}` }, undefined, "return=minimal");
+  clearSyncedKey(field = "openrouter_key") {
+    return this.rest("PATCH", "user_secrets", { user_id: `eq.${this.user.id}` }, { [field]: null }, "return=minimal");
   }
 
   // Devices signed in to the account.
