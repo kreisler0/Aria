@@ -138,22 +138,24 @@ function applyAppearance() {
   applyCursors(accent[1]);
 }
 
-// ---- Cursor: a slim macOS-style arrow (native, so it never lags), in the accent colour
-// over things you can click. Drawn as SVG at 1× and 2× so it's sharp on every screen.
+// ---- Cursor: a small rounded pointer (native, so it never lags), in the accent colour over
+// things you can click. Drawn as SVG at 1× and 2× so it's sharp on every screen.
+
+const POINTER = "M2.2 2.2 13.6 7.4 8.1 9.4 4.4 13.8Z";
 
 function cursorImage(fill, scale) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${22 * scale}" height="${22 * scale}" viewBox="0 0 22 22">` +
-    '<filter id="s" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy=".7" stdDeviation=".75" flood-opacity=".38"/></filter>' +
-    `<path d="M3.8 2.6v14.1l3.5-3.4 2.3 5.3 2.6-1.1-2.3-5.2h4.9z" fill="${fill}" stroke="#fff" stroke-width="1.3" stroke-linejoin="round" filter="url(#s)"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${14 * scale}" height="${14 * scale}" viewBox="0 0 16 16">` +
+    `<path d="${POINTER}" fill="#fff" stroke="#fff" stroke-width="2.4" stroke-linejoin="round" opacity=".9"/>` +
+    `<path d="${POINTER}" fill="${fill}" stroke="${fill}" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 function cursorValue(fill, fallback) {
-  const sharp = `image-set(${cursorImage(fill, 1)} 1x, ${cursorImage(fill, 2)} 2x) 4 3, ${fallback}`;
+  const sharp = `image-set(${cursorImage(fill, 1)} 1x, ${cursorImage(fill, 2)} 2x) 2 2, ${fallback}`;
   if (CSS.supports("cursor", sharp)) return sharp;
   const webkit = sharp.replace("image-set(", "-webkit-image-set(");
   if (CSS.supports("cursor", webkit)) return webkit;
-  return `${cursorImage(fill, 1)} 4 3, ${fallback}`;
+  return `${cursorImage(fill, 1)} 2 2, ${fallback}`;
 }
 
 function applyCursors(accent) {
