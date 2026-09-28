@@ -121,8 +121,8 @@ let pollTimer = null;
 
 /** Put the cursor in a field automatically only with a mouse or trackpad: on phones it pops
  *  the keyboard up uninvited (and older iOS zooms the page in). */
-/** Aria's glass mark, its glow in the chosen accent colour. */
-const logo = (cls) => logoSvg({ a: "var(--accent)", b: "var(--accent-2)", attrs: ` class="${cls}" aria-hidden="true"` });
+/** Aria's glass mark (its glow, in the accent colour, comes from CSS). */
+const logo = (cls) => logoSvg({ attrs: ` class="${cls}" aria-hidden="true"` });
 
 const canAutofocus = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
 
