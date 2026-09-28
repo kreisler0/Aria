@@ -152,7 +152,7 @@ button { cursor: pointer; }
 .nav-item { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 16px; border: 0; background: none; color: var(--muted); text-align: left; font-weight: 560; font-size: 15px;
   transition: color 0.25s var(--ease), transform 0.55s var(--spring), background 0.25s var(--ease); }
 .nav-item svg { width: 21px; height: 21px; flex: none; transition: transform 0.55s var(--spring); }
-.nav-item:hover { color: var(--text); background: color-mix(in srgb, var(--glass-hover) 60%, transparent); }
+.nav-item:hover { color: var(--text); }
 .nav-item:hover svg { transform: scale(1.1) rotate(-4deg); }
 .nav-item:active { transform: scale(0.95); transition-duration: 0.12s; transition-timing-function: var(--ease); }
 .nav-item[aria-current="page"] { color: var(--accent); background: none; }
@@ -247,8 +247,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 @keyframes rowIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
 .row + .row::before { content: ""; position: absolute; left: 50px; right: 14px; top: -1px; height: 1px; background: var(--glass-line); transition: opacity 0.2s; }
 .row.clickable { cursor: pointer; }
-.row.clickable:hover { background: var(--glass-hover);
-  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), 0 8px 20px -12px rgba(30, 30, 70, 0.35); transform: translateY(-1px) scale(1.006); }
+.row.clickable:hover { transform: translateY(-1px) scale(1.006); }
 .row.clickable:hover::before, .row.clickable:hover + .row::before { opacity: 0; }
 .row.clickable:active { transform: scale(0.985); transition-duration: 0.12s; }
 .row .main { flex: 1; min-width: 0; }
@@ -367,7 +366,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .cal-grid .dow { font-size: 11.5px; color: var(--muted); padding: 8px 8px 6px; text-align: center; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; }
 .cal-day { position: relative; min-height: 88px; border: 0; background: none; text-align: left; padding: 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; border-radius: 14px;
   transition: background 0.25s var(--ease), transform 0.55s var(--spring), box-shadow 0.25s; }
-.cal-day:hover { background: var(--glass-hover); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line); transform: scale(1.03); z-index: 1; }
+.cal-day:hover { transform: scale(1.03); z-index: 1; }
 .cal-day:active { transform: scale(0.96); transition-duration: 0.1s; }
 .cal-day .num { font-size: 13px; font-weight: 650; width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center; transition: transform 0.5s var(--spring); }
 .cal-day:hover .num { transform: scale(1.1); }
@@ -384,8 +383,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .cal-layout { display: grid; grid-template-columns: 1fr 350px; gap: 20px; align-items: start; }
 @media (max-width: 1040px) { .cal-layout { grid-template-columns: 1fr; } }
 .week { display: grid; grid-template-columns: repeat(7, 1fr); padding: 6px; gap: 4px; }
-.week .col { min-height: 280px; padding: 8px 6px; display: flex; flex-direction: column; gap: 6px; min-width: 0; cursor: pointer; border-radius: 16px; transition: background 0.25s, transform 0.55s var(--spring); }
-.week .col:hover { background: var(--glass-hover); }
+.week .col { position: relative; min-height: 280px; padding: 8px 6px; display: flex; flex-direction: column; gap: 6px; min-width: 0; cursor: pointer; border-radius: 16px; transition: background 0.25s, transform 0.55s var(--spring); }
 .week .col[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent); }
 .week .col-head { text-align: center; font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
 .week .col-head b { display: block; font-size: 22px; letter-spacing: -0.03em; color: var(--text); text-transform: none; }
@@ -398,7 +396,7 @@ h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color
 .week .item small { display: block; color: var(--muted); font-weight: 500; }
 @media (max-width: 760px) { .week { grid-template-columns: 1fr; } .week .col { min-height: 0; } .week .col-head { text-align: left; } .week .col-head b { display: inline; font-size: 16px; margin-left: 6px; } }
 .agenda h3 { margin: 0; font-size: 19px; letter-spacing: -0.02em; }
-.agenda .list { padding: 0; }
+.agenda .list { padding: 0; margin: 0 -12px; } /* rows sit 6px inside the card, like every other list */
 .agenda .note { width: 100%; resize: vertical; min-height: 76px; }
 
 /* ---- Forms */
@@ -602,3 +600,20 @@ html { cursor: var(--cursor-arrow, default); }
 a, button, select, summary, label.toggle, input[type="checkbox"], [role="button"], [data-action], [data-nav], .clickable, .cal-day, .week .col { cursor: var(--cursor-link, pointer); }
 input:not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"] { cursor: text; }
 button:disabled, .btn:disabled, [aria-disabled="true"] { cursor: var(--cursor-arrow, default); }
+
+/* ---- Liquid hover: a glass pill that swells into place with a spring and melts away,
+   instead of a background that switches on. Only opacity and transform animate. */
+.row.clickable, .nav-item, .cal-day, .week .col { isolation: isolate; }
+.row.clickable::after, .nav-item::after, .cal-day::after, .week .col::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: var(--glass-hover);
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-line), 0 10px 24px -14px rgba(30, 30, 70, 0.35);
+  opacity: 0; transform: scale(0.9, 0.82);
+  transition: opacity 0.5s var(--ease), transform 0.75s var(--spring);
+}
+.row.clickable:hover::after, .nav-item:hover::after, .cal-day:hover::after, .week .col:hover::after {
+  opacity: 1; transform: scale(1);
+  transition: opacity 0.28s var(--ease), transform 0.6s var(--spring);
+}
+.row.clickable:active::after, .cal-day:active::after, .week .col:active::after { transform: scale(0.97, 0.94); transition-duration: 0.12s; }
+.tabbar .nav-item::after, .nav-item[aria-current="page"]::after { display: none; }

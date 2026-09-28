@@ -1036,7 +1036,7 @@ function viewCalendar() {
           <h3>${esc(longDay(startOfDay(selected)))}</h3>
           <button class="icon-btn" data-action="new-event" data-day="${selected}" aria-label="Add event on this day">${icon("plus")}</button>
         </div>
-        ${agendaItems.length ? `<ul class="list" style="margin:0 -18px">${agendaItems.join("")}</ul>` : '<p class="help" style="margin:4px 0 14px">Nothing planned.</p>'}
+        ${agendaItems.length ? `<ul class="list">${agendaItems.join("")}</ul>` : '<p class="help" style="margin:4px 0 14px">Nothing planned.</p>'}
         <label class="field" style="margin:14px 0 0">Notes for the day
           <textarea id="day-note" class="note" placeholder="Anything to remember…" ${state.note.key === selected && state.note.loaded ? "" : "disabled"}>${esc(state.note.key === selected ? state.note.text : "")}</textarea>
         </label>

@@ -110,6 +110,9 @@ jobs:
             node web/build.mjs
           fi
           cp web/dist/Aria.html _site/Aria.html
+          # Serve the single bundled file as the site: one file can't be half-updated in a
+          # browser's cache the way separate scripts and styles can.
+          cp web/dist/Aria.html _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
