@@ -353,14 +353,16 @@ export class SupabaseClient {
   // The assistant keys (OpenRouter, Groq), shared by every device on the account
   // (user_secrets, owner-only). Older backends only have the OpenRouter column.
 
-  /** {openrouter: key|null, groq: key|null}; groq is undefined when the backend lacks it. */
+  /** {openrouter, groq, deepseek}: each a key or null; undefined when the backend can't
+   *  hold that key yet (an older database). */
   async fetchSyncedKeys() {
-    try {
-      const rows = await this.rest("GET", "user_secrets", { select: "openrouter_key,groq_key" });
-      return { openrouter: rows?.[0]?.openrouter_key || null, groq: rows?.[0]?.groq_key || null };
-    } catch (error) {
-      if (!/groq_key/.test(error?.message ?? "")) throw error;
-      return { openrouter: await this.fetchSyncedKey(), groq: undefined };
+    for (const columns of [["openrouter", "groq", "deepseek"], ["openrouter", "groq"], ["openrouter"]]) {
+      try {
+        const rows = await this.rest("GET", "user_secrets", { select: columns.map((c) => `${c}_key`).join(",") });
+        return Object.fromEntries(columns.map((c) => [c, rows?.[0]?.[`${c}_key`] || null]));
+      } catch (error) {
+        if (columns.length === 1 || !/(groq|deepseek)_key/.test(error?.message ?? "")) throw error;
+      }
     }
   }
 

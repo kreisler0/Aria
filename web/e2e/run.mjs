@@ -22,6 +22,7 @@ const out = process.env.ARIA_E2E_OUT ?? join(root, "e2e", "out");
 await mkdir(out, { recursive: true });
 const OPENROUTER_KEY = "sk-or-v1-e2e-test-key";
 const GROQ_KEY = "gsk_e2e-test-key";
+const DEEPSEEK_KEY = "sk-deepseek-e2e-test-key";
 
 // ---- Static server for web/
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json" };
@@ -154,6 +155,21 @@ await page.route("https://api.groq.com/openai/v1/**", async (route) => {
     }] } }] } });
   }
   return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "<think>done</think>**Biology** is in, every Monday at 9." } }] } });
+});
+// DeepSeek, played by the test: V4 Pro is text only, so Flash reads the photo first.
+const deepseekRequests = [];
+await page.route("https://api.deepseek.com/**", async (route) => {
+  const request = route.request();
+  const body = request.postDataJSON();
+  deepseekRequests.push({ body, auth: request.headers().authorization });
+  if (!body.tools) return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "Friday 14:00–15:30 Chemistry practical" } }] } });
+  if (body.messages.at(-1).role === "user") {
+    return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: null, reasoning_content: "One weekly lesson to add.", tool_calls: [{
+      id: "call_chem", type: "function",
+      function: { name: "create_event", arguments: JSON.stringify({ title: "Chemistry practical", start_at: "2026-11-06T14:00:00-05:00", end_at: "2026-11-06T15:30:00-05:00", repeat_weekly_until: "2026-11-20" }) },
+    }] } }] } });
+  }
+  return route.fulfill({ json: { choices: [{ message: { role: "assistant", content: "**Chemistry practical** is in, Fridays at 2.", reasoning_content: "Done." } }] } });
 });
 // pdf.js, played by the test (the app loads the real one from jsDelivr).
 await page.route("https://cdn.jsdelivr.net/npm/pdfjs-dist@*/build/**", (route) => route.fulfill({
@@ -486,6 +502,45 @@ try {
     assert.equal(await page.getByLabel("Model").inputValue(), "openai/gpt-4o");
   });
 
+  await step("DeepSeek: switch provider, synced key, V4 Pro with a photo read by Flash", async () => {
+    await go("Settings");
+    await page.getByRole("group", { name: "Provider" }).getByRole("button", { name: "DeepSeek" }).click();
+    await page.locator("#toast").getByText("Aria now uses DeepSeek — add your DeepSeek key below").waitFor();
+    await page.getByLabel(/DeepSeek API key/).fill(DEEPSEEK_KEY);
+    await page.getByRole("button", { name: "Save key" }).click();
+    await page.getByText("Synced to your account", { exact: true }).waitFor();
+    const [secret] = await rest(token, "user_secrets?select=openrouter_key,groq_key,deepseek_key");
+    assert.deepEqual(secret, { openrouter_key: OPENROUTER_KEY, groq_key: GROQ_KEY, deepseek_key: DEEPSEEK_KEY }, "all three keys are kept");
+    assert.equal(await page.getByLabel("Model").inputValue(), "deepseek-flash", "DeepSeek starts on V4.1 Flash");
+    await page.getByLabel("Model").selectOption("deepseek-v4-pro");
+    await page.locator("#toast").getByText("Model saved").waitFor();
+    await page.getByText("first read by DeepSeek V4.1 Flash").waitFor();
+    await shot("settings-deepseek");
+
+    await go("Assistant");
+    assert.equal(await page.locator(".model-chip").innerText(), "DeepSeek V4 Pro");
+    await page.locator("#ai-file").setInputFiles([{ name: "lab.png", mimeType: "image/png", buffer: PNG }]);
+    await page.locator(".attachment").filter({ hasText: "lab.png" }).getByText(/KB/).waitFor();
+    await page.getByLabel("Ask Aria").fill("Add this until Nov 20");
+    await page.getByLabel("Ask Aria").press("Enter");
+    await page.locator(".bubble.assistant strong", { hasText: "Chemistry practical" }).waitFor();
+
+    assert.ok(deepseekRequests.every((r) => r.auth === `Bearer ${DEEPSEEK_KEY}`));
+    assert.deepEqual(deepseekRequests.map((r) => r.body.model), ["deepseek-flash", "deepseek-v4-pro", "deepseek-v4-pro"]);
+    const asked = deepseekRequests[1].body.messages.at(-1).content;
+    assert.equal(typeof asked, "string", "V4 Pro gets plain text");
+    assert.match(asked, /--- lab\.png \(read from the image\) ---\nFriday 14:00–15:30 Chemistry practical/);
+    const back = deepseekRequests[2].body.messages.find((m) => m.role === "assistant" && m.tool_calls);
+    assert.equal(back.reasoning_content, "One weekly lesson to add.", "DeepSeek gets its reasoning back with the tool result");
+    const events = await rest(token, "events?select=start_at&title=eq.Chemistry%20practical");
+    assert.equal(events.length, 3);
+    await rest(token, "events?title=eq.Chemistry%20practical", { method: "DELETE" });
+
+    await go("Settings");
+    await page.getByRole("group", { name: "Provider" }).getByRole("button", { name: "OpenRouter" }).click();
+    await page.locator("#toast").getByText("Aria now uses OpenRouter").waitFor();
+  });
+
   await step("a change from the iPhone arrives live", async () => {
     const [task] = await rest(token, "tasks", { method: "POST", body: JSON.stringify({ title: "Call Mum", priority: 2 }) });
     await go("Tasks");
@@ -555,6 +610,9 @@ try {
     const groq = supabaseTraffic.filter((t) => t.includes(GROQ_KEY));
     assert.ok(groq.length >= 1);
     assert.deepEqual(groq.filter((t) => !JSON.parse(t)[0].includes("/rest/v1/user_secrets")), [], "the Groq key likewise");
+    const deepseek = supabaseTraffic.filter((t) => t.includes(DEEPSEEK_KEY));
+    assert.ok(deepseek.length >= 1);
+    assert.deepEqual(deepseek.filter((t) => !JSON.parse(t)[0].includes("/rest/v1/user_secrets")), [], "the DeepSeek key likewise");
   });
 
   await step("a second device gets the same key, lists both devices, and can sign the first out", async () => {

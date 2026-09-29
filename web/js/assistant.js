@@ -35,6 +35,7 @@ export class AssistantEngine {
         return { text: answer, outcomes, transcript };
       }
       const turn = { role: "assistant", content: reply.content ?? null, toolCalls: calls };
+      if (reply.reasoning) turn.reasoning = reply.reasoning; // sent back within this turn only
       messages.push(turn);
       transcript.push(turn);
       for (const call of calls) {

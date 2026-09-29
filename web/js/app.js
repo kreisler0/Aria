@@ -40,7 +40,7 @@ const store = {
   },
 };
 
-const KEYS = { backend: "aria.backend", session: "aria.session", openrouter: "aria.openrouterKey", groq: "aria.groqKey", theme: "aria.theme", accent: "aria.accent", device: "aria.deviceId" };
+const KEYS = { backend: "aria.backend", session: "aria.session", openrouter: "aria.openrouterKey", groq: "aria.groqKey", deepseek: "aria.deepseekKey", theme: "aria.theme", accent: "aria.accent", device: "aria.deviceId" };
 
 const ICONS = {
   today: '<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
@@ -140,7 +140,9 @@ function focusAsk() {
 const provider = () => providerOf(state.profile?.ai_provider);
 const aiKey = (p = provider()) => store.get(KEYS[p.id]) || "";
 const aiModel = (p = provider()) => state.profile?.[p.modelField] || p.defaultModel;
-const visionModel = () => state.profile?.groq_vision_model || PROVIDERS.groq.defaultModel;
+/** The model that reads pictures for a text-only chat model: Groq's is a setting, DeepSeek's
+ *  is Flash (same key). */
+const visionModel = (p = provider()) => (p.id === "groq" ? state.profile?.groq_vision_model : null) || p.visionModel;
 const modelLabel = (p, id) => p.curated.find((m) => m.id === id)?.name.replace(/ · .*$/, "") ?? id;
 const route = () => {
   const name = location.hash.replace(/^#\/?/, "");
@@ -241,6 +243,7 @@ function signedOut(message) {
   // The key belongs to the account: don't leave it behind in a signed-out browser.
   store.set(KEYS.openrouter, null);
   store.set(KEYS.groq, null);
+  store.set(KEYS.deepseek, null);
   state.keySynced = null;
   state.attachments = [];
   state.devices = null;
@@ -392,7 +395,7 @@ async function syncKey() {
   try {
     const remote = await state.client.fetchSyncedKeys();
     state.keySynced = true;
-    state.groqSynced = remote.groq !== undefined;
+    state.canSync = Object.fromEntries(Object.keys(PROVIDERS).map((id) => [id, remote[id] !== undefined]));
     for (const p of Object.values(PROVIDERS)) {
       if (remote[p.id] === undefined) continue; // this backend can't hold it yet
       const local = aiKey(p);
@@ -1260,9 +1263,10 @@ async function ask(text, files = []) {
   try {
     const client = new ChatClient(p, () => aiKey(p));
     const model = aiModel(p);
-    // Groq takes no PDFs and only some models see images: turn files into what it reads.
-    const prepared = p.id === "groq" && files.some((f) => f.kind === "pdf" || f.kind === "image")
-      ? await adaptForGroq(files, { chatReadsImages: groqReadsImages(model), transcribe: (image) => transcribeImage(client, visionModel(), image) })
+    // Groq and DeepSeek take no PDFs and only some of their models see images: turn files
+    // into what the chosen model reads.
+    const prepared = !p.nativePdf && files.some((f) => f.kind === "pdf" || f.kind === "image")
+      ? await adaptForGroq(files, { chatReadsImages: p.readsImages(model), maxImages: p.maxImages, transcribe: (image) => transcribeImage(client, visionModel(p), image) })
       : files;
     const engine = new AssistantEngine(client, new ToolExecutor(assistantData()));
     const reply = await engine.respond(text, model, contextMessages(state.conversation), snapshotForPrompt(state.tasks, state.events, started), started, undefined, prepared);
@@ -1414,8 +1418,10 @@ function viewSettings() {
   const options = [...p.curated];
   for (const m of state.models[p.id] ?? []) if (!options.some((o) => o.id === m.id)) options.push(m);
   const known = options.some((o) => o.id === model);
-  const canChoose = !!state.profile && "ai_provider" in state.profile; // the backend has the provider columns
-  const synced = state.keySynced === true && (p.id === "openrouter" || state.groqSynced);
+  // Which providers this backend can store (older databases lack the newer columns).
+  const available = (o) => o.id === "openrouter" || (!!state.profile && o.modelField in state.profile && "ai_provider" in state.profile);
+  const canChoose = Object.values(PROVIDERS).every(available);
+  const synced = state.keySynced === true && (p.id === "openrouter" || state.canSync?.[p.id]);
   const theme = store.get(KEYS.theme) || "system";
   const accent = store.get(KEYS.accent) || ACCENTS[0][0];
   return `
@@ -1437,8 +1443,8 @@ function viewSettings() {
       <h2>Assistant</h2>
       <div class="card">
         <div class="set-row"><span class="label">Provider</span>
-          <div class="seg" role="group" aria-label="Provider">${Object.values(PROVIDERS).map((o) => `<button data-action="provider" data-provider="${o.id}" aria-pressed="${p.id === o.id}" ${canChoose || o.id === "openrouter" ? "" : "disabled"}>${o.name}</button>`).join("")}</div></div>
-        ${canChoose ? "" : '<p class="help" style="margin:0 18px 12px">Groq needs the latest database update on your Supabase project (it installs itself from GitHub).</p>'}
+          <div class="seg" role="group" aria-label="Provider">${Object.values(PROVIDERS).map((o) => `<button data-action="provider" data-provider="${o.id}" aria-pressed="${p.id === o.id}" ${available(o) ? "" : "disabled"}>${o.name}</button>`).join("")}</div></div>
+        ${canChoose ? "" : '<p class="help" style="margin:0 18px 12px">Some providers need the latest database update on your Supabase project (it installs itself from GitHub).</p>'}
         <div class="set-row stack">
           <form id="key-form">
             <label class="field" style="margin-bottom:8px">${p.name} API key ${key ? `<span class="pill ai" style="margin-left:6px">${synced ? "Synced to your account" : "Saved on this device"}</span>` : ""}
@@ -1459,11 +1465,13 @@ function viewSettings() {
             ${state.models[p.id] ? "" : `<button class="btn" data-action="load-models">Show all ${p.id === "groq" ? "" : "tool-capable "}models</button>`}
             <form id="custom-model-form" class="hstack" style="flex:1;min-width:240px"><input id="custom-model" type="text" placeholder="Or type a model id, e.g. ${p.modelExample}" style="flex:1"><button class="btn" type="submit">Use</button></form>
           </div>
-          <p class="help" style="margin:10px 0 0">${p.id === "groq"
-            ? (groqReadsImages(model)
-              ? "This model reads images itself. PDFs are turned into text (and short ones into page images) before they're sent, since Groq doesn't take PDF files."
-              : "This model reads text only: timetable photos and scanned pages are first read by the image model below, then handed to it.")
-            : "Saved to your account, so every device uses it. The model must support tool calling."}</p>
+          <p class="help" style="margin:10px 0 0">${p.nativePdf
+            ? "Saved to your account, so every device uses it. The model must support tool calling."
+            : p.readsImages(model)
+              ? `This model reads images itself. PDFs are turned into text (and short ones into page images) before they're sent, since ${p.name} doesn't take PDF files.`
+              : p.id === "groq"
+                ? "This model reads text only: timetable photos and scanned pages are first read by the image model below, then handed to it."
+                : `This model reads text only: timetable photos and scanned pages are first read by ${modelLabel(p, p.visionModel)} (same key), then handed to it.`}</p>
         </div>
         ${p.id === "groq" ? groqVisionRow() : ""}
       </div>
@@ -1773,7 +1781,7 @@ document.addEventListener("submit", async (e) => {
     e.preventDefault();
     const p = provider();
     const value = $("#custom-model").value.trim();
-    const shape = p.id === "groq" ? /^[\w.:/-]+$/ : /^[\w.-]+\/[\w.:-]+$/;
+    const shape = p.id === "openrouter" ? /^[\w.-]+\/[\w.:-]+$/ : /^[\w.:/-]+$/;
     if (!shape.test(value)) return toast(`Model ids look like ${p.modelExample}.`, "error");
     setModel(value);
   }

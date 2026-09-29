@@ -441,3 +441,34 @@ test("Groq files: PDFs become text and page images; text-only models get images 
   await assert.rejects(adaptForGroq(files.slice(0, 1), { chatReadsImages: true, transcribe: null, pdf: async () => { throw new Error("bad xref"); } }),
     /Couldn't open timetable\.pdf: bad xref\./);
 });
+
+test("DeepSeek: its own endpoint, reasoning sent back within a tool turn, Flash reads images", async () => {
+  const { ChatClient, PROVIDERS, deepseekReadsImages } = await import("../js/openrouter.js");
+  const sent = [];
+  const replies = [
+    { choices: [{ message: { content: null, reasoning_content: "Need to add the task.", tool_calls: [{ id: "d1", type: "function", function: { name: "create_task", arguments: "{\"title\":\"Essay\"}" } }] } }] },
+    { choices: [{ message: { content: "Added Essay.", reasoning_content: "Done." } }] },
+  ];
+  const fake = async (url, init) => {
+    sent.push({ url, body: JSON.parse(init.body), headers: init.headers });
+    return { ok: true, status: 200, json: async () => replies.shift() };
+  };
+  const client = new ChatClient("deepseek", () => "sk-ds", fake);
+  const engine = new AssistantEngine(client, new ToolExecutor(new FakeData(), () => NOW));
+  const reply = await engine.respond("Add essay", "deepseek-v4-pro", [], { tasks: [], events: [] }, NOW);
+  assert.equal(reply.text, "Added Essay.");
+  assert.equal(sent[0].url, "https://api.deepseek.com/chat/completions");
+  assert.equal(sent[0].headers.Authorization, "Bearer sk-ds");
+  assert.equal(sent[0].headers["X-Title"], undefined);
+  const assistantTurn = sent[1].body.messages.find((m) => m.role === "assistant");
+  assert.equal(assistantTurn.reasoning_content, "Need to add the task.", "reasoning goes back with the tool results");
+  assert.equal("name" in sent[1].body.messages.at(-1), false);
+  // …but never into history or other providers.
+  assert.equal(JSON.stringify(logEntries(reply, NOW)).includes("Need to add"), false);
+  const groq = new ChatClient("groq", () => "k", fake);
+  assert.equal("reasoning_content" in groq.wire({ role: "assistant", content: null, reasoning: "x", toolCalls: [{ id: "a", name: "n", arguments: "{}" }] }), false);
+
+  assert.equal(PROVIDERS.deepseek.nativePdf, false);
+  assert.equal(deepseekReadsImages("deepseek-flash"), true);
+  assert.equal(deepseekReadsImages("deepseek-v4-pro"), false);
+});

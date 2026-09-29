@@ -96,10 +96,11 @@ export const TRANSCRIBE_PROMPT = [
   "Keep the headings, dates, term names and any notes. Don't summarise or leave anything out; if something is unreadable, say so.",
 ].join(" ");
 
-/** Turns attachments into what a Groq model can take: PDFs become their text (and, when
- *  short or scanned, page images); images go to the chat model if it can see them (up to
- *  GROQ_MAX_IMAGES), otherwise `transcribe(image)` reads each one into text first. */
-export async function adaptForGroq(files, { chatReadsImages, transcribe, pdf = pdfContents }) {
+/** Turns attachments into what a provider without PDF support (Groq, DeepSeek) can take:
+ *  PDFs become their text (and, when short or scanned, page images); images go to the chat
+ *  model if it can see them (up to `maxImages`), otherwise `transcribe(image)` reads each
+ *  one into text first. */
+export async function adaptForGroq(files, { chatReadsImages, transcribe, pdf = pdfContents, maxImages = GROQ_MAX_IMAGES }) {
   const out = [];
   const images = [];
   for (const f of files) {
@@ -121,7 +122,7 @@ export async function adaptForGroq(files, { chatReadsImages, transcribe, pdf = p
       out.push(f);
     }
   }
-  if (chatReadsImages && images.length <= GROQ_MAX_IMAGES) return [...out, ...images];
+  if (chatReadsImages && images.length <= maxImages) return [...out, ...images];
   for (const image of images) {
     out.push({ name: image.name, from: image.from ?? image.name, kind: "text", text: await transcribe(image), note: "read from the image" });
   }
