@@ -27,9 +27,22 @@ jobs:
         working-directory: web
         run: npm test
 
+      # The action looks up "latest" through GitHub's API without a token, which is sometimes
+      # rate-limited; then the release is downloaded with this run's token instead.
       - uses: supabase/setup-cli@v1
+        id: supabase-cli
+        continue-on-error: true
         with:
           version: latest
+      - name: Install the Supabase CLI (if the lookup was rate-limited)
+        if: steps.supabase-cli.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo supabase/cli --pattern 'supabase_linux_amd64.tar.gz' --dir "$RUNNER_TEMP/supabase-cli"
+          tar -xzf "$RUNNER_TEMP/supabase-cli/supabase_linux_amd64.tar.gz" -C "$RUNNER_TEMP/supabase-cli"
+          sudo install "$RUNNER_TEMP/supabase-cli/supabase" /usr/local/bin/supabase
+          supabase --version
       - name: Start local Supabase (applies supabase/migrations)
         run: supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta
       - name: Export API settings
